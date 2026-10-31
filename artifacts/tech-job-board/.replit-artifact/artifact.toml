@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Tech Job Board"
+description = "A responsive technology hiring marketplace where candidates discover roles, save jobs, and track applications while companies manage postings and applicants. This first build uses a mock service layer so complete user journeys work before the real backend is connected."
+version = "1.0.0"
+id = "artifacts/tech-job-board"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 21213
+
+[services.development]
+run = "pnpm --filter @workspace/tech-job-board run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/tech-job-board", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/tech-job-board/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21213"
+BASE_PATH = "/"
