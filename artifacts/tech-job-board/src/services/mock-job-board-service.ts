@@ -36,7 +36,7 @@ const defaultState = (): State => ({
 
 export class MockJobBoardService implements JobBoardService {
   private state: State;
-  constructor(private storage?: Storage) {
+  constructor(private storage?: Pick<Storage, 'getItem' | 'setItem'>) {
     this.state = this.readState();
   }
   private readState(): State {

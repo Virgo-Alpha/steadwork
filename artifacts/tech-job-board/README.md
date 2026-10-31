@@ -1,35 +1,24 @@
 # Steadwork Tech Job Board
 
-Responsive job-board frontend with a mock service layer. The mock is the default, so candidate, guest, and employer flows run without a backend.
+Standalone React/Vite frontend with an included mock service. Candidate, guest, and employer flows work without a backend. This folder uses npm and does not depend on the root Replit pnpm workspace.
 
-## Run locally
+## Copy into your project
 
-Export or clone the **whole repository**. This app is a pnpm workspace package and uses shared workspace dependencies, so downloading only this folder is not sufficient.
-
-From the repository root:
+After exporting the repository, copy the contents of `artifacts/tech-job-board` into your project's `frontend/` folder. Open a terminal in `frontend/` and run:
 
 ```sh
-pnpm install --frozen-lockfile
-PORT=5173 BASE_PATH=/ pnpm --filter @workspace/tech-job-board run dev
+npm ci
+npm run dev
 ```
 
 Open `http://localhost:5173`.
 
-On Windows PowerShell:
-
-```powershell
-pnpm install --frozen-lockfile
-$env:PORT="5173"
-$env:BASE_PATH="/"
-pnpm --filter @workspace/tech-job-board run dev
-```
-
 ## Checks
 
 ```sh
-pnpm --filter @workspace/tech-job-board run test
-pnpm --filter @workspace/tech-job-board run typecheck
-PORT=5173 BASE_PATH=/ pnpm --filter @workspace/tech-job-board run build
+npm test
+npm run typecheck
+npm run build
 ```
 
 ## Service layer
@@ -38,6 +27,6 @@ PORT=5173 BASE_PATH=/ pnpm --filter @workspace/tech-job-board run build
 - `src/services/mock-job-board-service.ts` is the default implementation and persists demo data in browser storage.
 - `src/services/http-job-board-service.ts` is the typed HTTP adapter for a future API.
 - `src/services/index.ts` selects the implementation.
-- `backend-plan.md` records the proposed API contract and the unresolved backend-stack choice.
+- `backend-plan.md` records the proposed API contract and the backend-stack choice to resolve.
 
 The mock does not store passwords, send verification or reset emails, or upload CV contents. The HTTP adapter is not connected to a running backend. Set `VITE_DATA_MODE=api` only when the matching API endpoints are available.

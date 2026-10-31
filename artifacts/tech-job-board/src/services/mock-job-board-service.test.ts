@@ -10,7 +10,7 @@ describe('MockJobBoardService', () => {
   });
   it('persists saved jobs through storage', async () => {
     const data = new Map<string, string>();
-    const store = { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => data.set(k,v) } as Storage;
+    const store = { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => { data.set(k,v); } };
     const first = new MockJobBoardService(store);
     await first.saveJob('job-platform');
     const second = new MockJobBoardService(store);
@@ -18,7 +18,7 @@ describe('MockJobBoardService', () => {
   });
   it('persists candidate CVs and the default selection through storage', async () => {
     const data = new Map<string, string>();
-    const store = { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => data.set(k, v) } as Storage;
+    const store = { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => { data.set(k, v); } };
     const first = new MockJobBoardService(store);
     await first.updateProfile({ cvFiles: ['Maya-Chen-Resume.pdf', 'Platform-Resume.pdf'], defaultCvId: 'Platform-Resume.pdf' });
     const second = new MockJobBoardService(store);
@@ -26,7 +26,7 @@ describe('MockJobBoardService', () => {
   });
   it('supports mock registration and verification without storing a password', async () => {
     const data = new Map<string, string>();
-    const store = { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => data.set(k, v) } as Storage;
+    const store = { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => { data.set(k, v); } };
     const service = new MockJobBoardService(store);
     const user = await service.registerAccount({ name: 'Taylor Reed', email: 'taylor@example.com', password: 'demo-password-123', role: 'company' });
     expect(user).toMatchObject({ name: 'Taylor Reed', role: 'company', emailVerified: false });

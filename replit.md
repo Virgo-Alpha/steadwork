@@ -5,8 +5,8 @@ A responsive technology hiring marketplace for candidates to discover and track 
 ## Run & Operate
 
 - `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
-- `pnpm --filter @workspace/tech-job-board run test` — run the service-layer tests
-- `pnpm --filter @workspace/tech-job-board run typecheck` — typecheck the web app
+- `npm --prefix artifacts/tech-job-board test` — run the frontend service-layer tests
+- `npm --prefix artifacts/tech-job-board run typecheck` — typecheck the frontend
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
@@ -32,6 +32,7 @@ A responsive technology hiring marketplace for candidates to discover and track 
 
 ## Architecture decisions
 
+- The frontend is a standalone npm package at `artifacts/tech-job-board`; its source can be copied into a `frontend/` directory and run independently.
 - All product data access goes through `JobBoardService`; pages must not call `fetch` or access browser storage directly.
 - Mock mode is the default and persists demo records in browser storage. CV entries store filenames only; file bytes are not uploaded.
 - `VITE_DATA_MODE=api` selects the HTTP adapter, but the proposed endpoints are not implemented yet.
@@ -49,7 +50,7 @@ No additional preferences recorded.
 
 - Mock sign-in, verification, reset, and role switching are demonstrations, not security controls or real email delivery.
 - Real uploads need a storage-backed endpoint; do not treat mock CV filenames as uploaded files.
-- Run the web app tests with `pnpm --filter @workspace/tech-job-board run test`.
+- Run the web app tests with `npm --prefix artifacts/tech-job-board test`.
 
 ## Pointers
 

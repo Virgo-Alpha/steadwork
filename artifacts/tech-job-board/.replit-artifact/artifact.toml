@@ -12,10 +12,10 @@ paths = [ "/" ]
 localPort = 21213
 
 [services.development]
-run = "pnpm --filter @workspace/tech-job-board run dev"
+run = "npm run dev"
 
 [services.production]
-build = [ "pnpm", "--filter", "@workspace/tech-job-board", "run", "build" ]
+build = [ "npm", "run", "build" ]
 serve = "static"
 publicDir = "artifacts/tech-job-board/dist/public"
 
