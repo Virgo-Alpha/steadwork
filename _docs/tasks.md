@@ -650,27 +650,28 @@ Goal: A new contributor can identify Steadwork’s intended users and current im
 - Do not include credentials, secrets, or personal/private resource links.
 
 ## 23. Define persistence requirements for deferred product features
-Status: review
+Status: merged (review approved; QA PASS; post-merge checks passed)
 Issue: https://github.com/Virgo-Alpha/steadwork/issues/23
 Worktree: `/tmp/steadwork-issue-23` (`issue-23-persistence-requirements`)
 Engineer: `/root/engineer_23`
 Reviewer worktree: `/tmp/steadwork-review-23` (`issue-23-review`), commits `9eabdc4`, `5e1e0e2`
 QA worktree: `/tmp/steadwork-qa-23` (`issue-23-qa`)
 Owned files: `_docs/specs.md`, `_docs/backend-plan.md` only
+Merged: `92a9998`
 Goal: Specify persistence, lifecycle, authorization, and proposed API contracts for the confirmed deferred capabilities and create linked implementation issues only where the contract is sufficiently concrete.
 
 ## Acceptance criteria
 
-- [ ] The requirements distinguish confirmed product scope from unresolved infrastructure and data-policy decisions. Confirmed scope includes company invitations/member administration, multiple CVs and per-application CV selection, external-apply click tracking without claiming submission completion, basic platform administration including suspension/removal, and asynchronous email with retries.
-- [ ] For team management, define invitation and membership records/fields; company/user relationships; pending, accepted, revoked, and expired lifecycle behavior; admin/recruiter permissions; and create/list/resend/revoke/remove API operations. Specify that removed members lose company access.
-- [ ] For CVs, define candidate-owned CV metadata and relationships to the candidate and applications, multiple/default/selected CV behavior, metadata lifecycle and APIs. Keep binary storage, access/download mechanics, validation limits, and retention tied to decision issue #26.
-- [ ] For external applications, define the click event record, job and optional registered-candidate relationship, event creation/redirect API operation, guest behavior, duplicate/retry behavior, authorization, and explicitly state that a click does not prove application submission. Keep retention tied to #28.
-- [ ] For moderation, define account suspension and job-removal records/state, actor/target relationships, affected-user access behavior, authorization, available admin operations, and required audit fields. Keep retention/audit policy tied to #28.
-- [ ] For asynchronous email, define persisted message/outbox data, triggering domain events, recipient relationship, queued/attempting/sent/failed transitions, idempotency and API behavior on enqueue failure. Keep provider, queue/worker choice, retry/backoff and operations policy tied to #27.
-- [ ] For every record, specify logical fields, relationships, deletion or retention behavior (or explicitly link unresolved policy to #26–#28), transitions, authorization, and the API operations that create/update it. Do not invent a retention duration.
-- [ ] For each capability whose contract is implementable after applying decisions #26–#28, create a separate linked implementation issue. Each issue cites the approved specification section, schema/migration and API scope, authorization/lifecycle cases, tests, and dependencies; do not create an implementation ticket whose contract still depends on an unresolved decision.
-- [ ] Update `_docs/specs.md` and `_docs/backend-plan.md` with the requirements, current-schema boundary, unresolved decisions, and links to all decision and implementation issues.
-- [ ] The issue changes no application code, API implementation, database schema, migrations, dependencies, or runtime infrastructure.
+- [x] The requirements distinguish confirmed product scope from unresolved infrastructure and data-policy decisions. Confirmed scope includes company invitations/member administration, multiple CVs and per-application CV selection, external-apply click tracking without claiming submission completion, basic platform administration including suspension/removal, and asynchronous email with retries.
+- [x] For team management, define invitation and membership records/fields; company/user relationships; pending, accepted, revoked, and expired lifecycle behavior; admin/recruiter permissions; and create/list/resend/revoke/remove API operations. Specify that removed members lose company access.
+- [x] For CVs, define candidate-owned CV metadata and relationships to the candidate and applications, multiple/default/selected CV behavior, metadata lifecycle and APIs. Keep binary storage, access/download mechanics, validation limits, and retention tied to decision issue #26.
+- [x] For external applications, define the click event record, job and optional registered-candidate relationship, event creation/redirect API operation, guest behavior, duplicate/retry behavior, authorization, and explicitly state that a click does not prove application submission. Keep retention tied to #28.
+- [x] For moderation, define account suspension and job-removal records/state, actor/target relationships, affected-user access behavior, authorization, available admin operations, and required audit fields. Keep retention/audit policy tied to #28.
+- [x] For asynchronous email, define persisted message/outbox data, triggering domain events, recipient relationship, queued/attempting/sent/failed transitions, idempotency and API behavior on enqueue failure. Keep provider, queue/worker choice, retry/backoff and operations policy tied to #27.
+- [x] For every record, specify logical fields, relationships, deletion or retention behavior (or explicitly link unresolved policy to #26–#28), transitions, authorization, and the API operations that create/update it. Do not invent a retention duration.
+- [x] For each capability whose contract is implementable after applying decisions #26–#28, create a separate linked implementation issue. Each issue cites the approved specification section, schema/migration and API scope, authorization/lifecycle cases, tests, and dependencies; do not create an implementation ticket whose contract still depends on an unresolved decision.
+- [x] Update `_docs/specs.md` and `_docs/backend-plan.md` with the requirements, current-schema boundary, unresolved decisions, and links to all decision and implementation issues.
+- [x] The issue changes no application code, API implementation, database schema, migrations, dependencies, or runtime infrastructure.
 
 ## Out of scope
 
