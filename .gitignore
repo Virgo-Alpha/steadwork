@@ -59,3 +59,6 @@ Thumbs.db
 .cache/
 .local/
 backend/.local-data/
+
+# Local PostgreSQL Compose credentials
+/.env

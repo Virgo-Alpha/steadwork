@@ -38,8 +38,9 @@ def test_default_database_is_an_ignored_local_sqlite_file():
 
 def test_database_url_override_and_invalid_backend():
     assert get_database_url({"DATABASE_URL": "sqlite:////tmp/steadwork-test.sqlite3"}) == "sqlite:////tmp/steadwork-test.sqlite3"
-    with pytest.raises(DatabaseConfigurationError, match="Only SQLite"):
-        get_database_url({"DATABASE_URL": "postgresql://user:pass@localhost/db"})
+    assert get_database_url({"DATABASE_URL": "postgresql://user:pass@localhost/db"}) == "postgresql+psycopg://user:pass@localhost/db"
+    with pytest.raises(DatabaseConfigurationError, match="SQLite or PostgreSQL"):
+        get_database_url({"DATABASE_URL": "mysql://user:pass@localhost/db"})
     with pytest.raises(DatabaseConfigurationError, match="valid SQLAlchemy URL"):
         get_database_url({"DATABASE_URL": "not a url"})
 

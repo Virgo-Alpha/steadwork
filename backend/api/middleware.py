@@ -27,11 +27,10 @@ class SQLiteStoreMiddleware:
         session = session_factory()
         store_token = None
         try:
-            # SQLite's deferred transaction would permit two requests to read
-            # the same snapshot before either writes. Reserve the write lock
-            # before hydrating so requests serialize their read/modify/write
-            # units and a later request always sees the earlier commit.
-            session.execute(text("BEGIN IMMEDIATE"))
+            if engine.dialect.name == "sqlite":
+                # SQLite's deferred transaction permits two requests to read
+                # the same snapshot before either writes. Serialize writes.
+                session.execute(text("BEGIN IMMEDIATE"))
             store = SQLAlchemyStoreRepository(session).load()
             session.flush()
             before = deepcopy(store)

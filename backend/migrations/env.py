@@ -82,7 +82,7 @@ def run_migrations_online() -> None:
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
-        connect_args={"timeout": 30},
+        connect_args={"timeout": 30} if url.drivername in {"sqlite", "sqlite+pysqlite"} else {},
     )
 
     @event.listens_for(connectable, "connect")

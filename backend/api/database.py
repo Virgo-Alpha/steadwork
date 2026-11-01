@@ -13,8 +13,8 @@ class DatabaseConfigurationError(ValueError):
 def get_store_backend(environ=None) -> str:
     environ = os.environ if environ is None else environ
     backend = environ.get("STEADWORK_STORE", "sqlite").strip().lower()
-    if backend not in {"sqlite", "inmemory"}:
-        raise DatabaseConfigurationError("STEADWORK_STORE must be 'sqlite' or 'inmemory'.")
+    if backend not in {"sqlite", "postgresql", "inmemory"}:
+        raise DatabaseConfigurationError("STEADWORK_STORE must be 'sqlite', 'postgresql' or 'inmemory'.")
     return backend
 
 
@@ -26,8 +26,10 @@ def get_database_url(environ=None) -> str:
         url = make_url(value)
     except Exception as exc:
         raise DatabaseConfigurationError("DATABASE_URL is not a valid SQLAlchemy URL.") from exc
-    if url.drivername not in {"sqlite", "sqlite+pysqlite"}:
-        raise DatabaseConfigurationError("Only SQLite DATABASE_URL values are supported by this backend.")
-    if url.database is None:
-        raise DatabaseConfigurationError("DATABASE_URL must name a SQLite database file or :memory:.")
+    if url.drivername not in {"sqlite", "sqlite+pysqlite", "postgresql", "postgresql+psycopg"}:
+        raise DatabaseConfigurationError("DATABASE_URL must use SQLite or PostgreSQL.")
+    if not url.database:
+        raise DatabaseConfigurationError("DATABASE_URL must name a database.")
+    if url.drivername == "postgresql":
+        value = url.set(drivername="postgresql+psycopg").render_as_string(hide_password=False)
     return value

@@ -1,9 +1,7 @@
 # Steadwork backend
 
 The backend uses **Django 5 and Django REST Framework** for HTTP routing and
-**SQLAlchemy 2.x** behind `api.store` for application data. SQLite is the
-default persistent store, managed by Alembic schema migrations. PostgreSQL
-support remains a future task. Django's built-in ORM remains disabled; route
+**SQLAlchemy 2.x** behind `api.store` for application data. SQLite is the default local persistent store, and PostgreSQL is available through the repository-root Docker Compose stack. Both use Alembic schema migrations. Django's built-in ORM remains disabled; route
 handlers use the existing domain dataclasses through the store boundary.
 
 ## Run locally
@@ -28,10 +26,7 @@ DATABASE_URL=sqlite:////tmp/steadwork.sqlite3 uv run alembic upgrade head
 DATABASE_URL=sqlite:////tmp/steadwork.sqlite3 uv run python manage.py runserver
 ```
 
-Only SQLite URLs are supported in this task. Invalid URLs and unsupported
-database schemes fail during settings initialization; they never fall back to
-the in-memory store. The smoke endpoint is
-`GET http://127.0.0.1:8000/api/health/` and reports `store: sqlite`.
+SQLite and PostgreSQL URLs are supported. Invalid URLs and unsupported database schemes fail during settings initialization; they never fall back to the in-memory store. The smoke endpoint is `GET http://127.0.0.1:8000/api/health/` and reports the selected store.
 
 ## Tests and checks
 
@@ -107,3 +102,31 @@ and require the matching role; an optional user ID suffix enforces ownership.
 Missing, malformed, invalid, or expired tokens return 401, while valid tokens
 without the required role or ownership return 403. Call `api.store.reset_store`
 between tests to restore the seed without shared state.
+
+
+## PostgreSQL with Docker Compose
+
+From the repository root, create a local environment file. Keep the generated password private; `.env` is ignored by Git.
+
+Compose requires `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD`; `DJANGO_ALLOWED_HOSTS` is optional. Generate a random local password and write the ignored `.env` file like this:
+
+```sh
+cat > .env <<EOF
+POSTGRES_DB=steadwork
+POSTGRES_USER=steadwork
+POSTGRES_PASSWORD=$(openssl rand -hex 24)
+DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
+EOF
+docker compose up -d
+```
+
+Compose starts only PostgreSQL and the API. The API waits for PostgreSQL readiness, applies `uv run alembic upgrade head`, and then starts Django. Its health check calls the API readiness endpoint and verifies it is backed by PostgreSQL. The first API request on an empty database inserts the deterministic local demo data once. Existing records are retained.
+
+```sh
+docker compose logs -f app
+docker compose logs -f postgres
+docker compose down                 # stop and preserve the postgres-data volume
+docker compose down -v              # destructive: delete the database volume and all its data
+```
+
+The seeded candidate login is `candidate@example.com` / `candidate-password`; recruiter and admin demo accounts are also seeded. These credentials are for local development only and must not be used as production secrets. PostgreSQL credentials are configured in the ignored `.env`; `.env.example` contains only a replacement placeholder.

@@ -23,14 +23,17 @@ def create_database(url: str | None = None):
     """Create an engine only when Alembic has initialized the current schema."""
     url = get_database_url({"DATABASE_URL": url}) if url is not None else get_database_url()
     parsed = make_url(url)
-    if parsed.drivername not in {"sqlite", "sqlite+pysqlite"}:
-        raise DatabaseConfigurationError("Only SQLite DATABASE_URL values are supported by this backend.")
-    if parsed.database and parsed.database != ":memory:" and not parsed.database.startswith("file:"):
+    if parsed.drivername not in {"sqlite", "sqlite+pysqlite", "postgresql", "postgresql+psycopg"}:
+        raise DatabaseConfigurationError("DATABASE_URL must use SQLite or PostgreSQL.")
+    is_sqlite = parsed.drivername in {"sqlite", "sqlite+pysqlite"}
+    if is_sqlite and parsed.database and parsed.database != ":memory:" and not parsed.database.startswith("file:"):
         Path(parsed.database).expanduser().resolve().parent.mkdir(parents=True, exist_ok=True)
-    engine = create_engine(url, connect_args={"check_same_thread": False, "timeout": 30})
+    engine = create_engine(url, connect_args={"check_same_thread": False, "timeout": 30} if is_sqlite else {})
 
     @event.listens_for(engine, "connect")
     def enable_foreign_keys(connection, _record):
+        if engine.dialect.name != "sqlite":
+            return
         cursor = connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.execute("PRAGMA busy_timeout=30000")
@@ -52,7 +55,7 @@ def create_database(url: str | None = None):
         if current_revision != expected_head or missing_tables:
             details = f" Missing tables: {', '.join(sorted(missing_tables))}." if missing_tables else ""
             raise DatabaseConfigurationError(
-                "SQLite schema is not at the current Alembic revision; run `uv run alembic upgrade head`."
+                "Database schema is not at the current Alembic revision; run `uv run alembic upgrade head`."
                 + details
             )
     except Exception:
