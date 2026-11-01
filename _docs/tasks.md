@@ -806,24 +806,26 @@ Goal: Record the product owner’s decisions on the delivery architecture and op
 - Keep post-enqueue provider delivery failure separate from the already committed user-facing domain operation.
 
 ## 28. Set retention and audit policy for deferred records
-Status: backlog
+Status: ready (product owner decisions requested)
 Issue: https://github.com/Virgo-Alpha/steadwork/issues/28
-Goal: Decide retention for deferred records and personal data, and define which administrative actions need an audit trail.
+Goal: Record product-owner-approved retention, deletion/anonymization, and audit rules for deferred persistence records before implementation issues are created under #23.
 
 ## Acceptance criteria
 
-- [ ] Define retention/deletion or anonymization for CV files and metadata, applications, external click events, invitations, notifications/email delivery records, and moderation actions.
-- [ ] Define behavior on candidate/company deletion, member removal, job removal, invitation expiry, and terminal email failure.
-- [ ] Define audited moderation/admin actions, actor/target/reason/time data, and audit access.
-- [ ] Identify decisions needing product or legal review, responsible owner, and resolution path.
-- [ ] Record approved rules in `_docs/specs.md` and `_docs/backend-plan.md`, linked from #23.
-- [ ] This issue changes no application code, API implementation, schema, or runtime infrastructure.
+- [ ] A policy matrix covers CV binaries and metadata, application records and selected-CV snapshots, external-apply click events, invitations and removed-membership history, notification/email outbox records and recipient snapshots, and moderation actions. For each record it names the retention trigger, disposition (delete, anonymize, or retain), and the product-owner-approved period or marks the decision unresolved; no duration is assumed.
+- [ ] The matrix defines effects of candidate/account deletion, company deletion, member removal, job removal, invitation acceptance/expiry/revocation, application withdrawal/closure, and terminal email failure on related records, access, and references. It preserves application history only as explicitly decided and states what happens to a CV reference when its binary is removed.
+- [ ] Backup policy states the approved expiry/deletion window and how deletion/anonymization requests are handled in backups and after restore, or marks each unresolved item with a named owner and decision path.
+- [ ] An audit matrix identifies administrative/moderation actions that must be recorded; for each, it specifies actor, target, action, reason, timestamp, retained fields, who may read it, and how audit records resist silent alteration. It distinguishes audit metadata from CV contents, email bodies, and other sensitive payloads.
+- [ ] Every item requiring product, privacy, or legal review is labeled with the accountable decision owner, required reviewer (if any), and a concrete resolution path; do not claim a legal requirement without an authoritative source.
+- [ ] Record approved decisions and unresolved items in `_docs/specs.md` and `_docs/backend-plan.md`, and link #28 from #23, #26, and #27. Keep the documents explicit that these policies and deferred behavior are not yet implemented.
+- [ ] This issue changes no application code, API implementation, database schema, dependencies, or runtime infrastructure; implementation remains out of scope for #23 and its follow-up implementation issues.
 
 ## Out of scope
 
-- Deletion jobs, anonymization, audit storage, and retention enforcement; these depend on the approved policy and #23.
+- Implementing deletion jobs, anonymization, audit storage, backup lifecycle, or retention enforcement; those depend on the approved policy and are split through #23.
 
 ## Constraints
 
 - Do not invent retention periods or claim a legal requirement without an authoritative decision.
 - Preserve existing MVP behavior until policy is recorded.
+- Do not treat the proposed records in `_docs/specs.md` as implemented tables or routes.
