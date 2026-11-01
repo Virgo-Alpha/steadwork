@@ -1,6 +1,7 @@
 """Opaque, expiring bearer authentication for the in-memory milestone."""
 
 import secrets
+from threading import RLock
 from datetime import datetime, timedelta
 from dataclasses import dataclass
 from django.conf import settings
@@ -17,6 +18,7 @@ class TokenSession:
 
 
 _tokens: dict[str, TokenSession] = {}
+_tokens_lock = RLock()
 
 
 def authenticate(email: str, password: str) -> User | None:
@@ -25,29 +27,29 @@ def authenticate(email: str, password: str) -> User | None:
 
 
 def issue_token(user: User, lifetime: timedelta | None = None) -> str:
-    now = timezone.now()
-    _tokens_copy = {
-        token: session for token, session in _tokens.items() if session.expires_at > now
-    }
-    _tokens.clear()
-    _tokens.update(_tokens_copy)
-    token = secrets.token_urlsafe(32)
-    expiry = lifetime if lifetime is not None else timedelta(
-        seconds=getattr(settings, "TOKEN_LIFETIME_SECONDS", 3600)
-    )
-    _tokens[token] = TokenSession(
-        user.id, now + expiry
-    )
-    return token
+    with _tokens_lock:
+        now = timezone.now()
+        _tokens_copy = {
+            token: session for token, session in _tokens.items() if session.expires_at > now
+        }
+        _tokens.clear()
+        _tokens.update(_tokens_copy)
+        token = secrets.token_urlsafe(32)
+        expiry = lifetime if lifetime is not None else timedelta(
+            seconds=getattr(settings, "TOKEN_LIFETIME_SECONDS", 3600)
+        )
+        _tokens[token] = TokenSession(user.id, now + expiry)
+        return token
 
 
 def validate_token(token: str, now: datetime | None = None) -> User | None:
-    session = _tokens.get(token)
-    current = now or timezone.now()
-    if not session or session.expires_at <= current:
-        _tokens.pop(token, None)
-        return None
-    return next((u for u in get_store().users if u.id == session.user_id), None)
+    with _tokens_lock:
+        session = _tokens.get(token)
+        current = now or timezone.now()
+        if not session or session.expires_at <= current:
+            _tokens.pop(token, None)
+            return None
+        return next((u for u in get_store().users if u.id == session.user_id), None)
 
 
 def current_user(request) -> User | None:
@@ -63,4 +65,5 @@ def current_user(request) -> User | None:
 
 
 def revoke_all_tokens() -> None:
-    _tokens.clear()
+    with _tokens_lock:
+        _tokens.clear()

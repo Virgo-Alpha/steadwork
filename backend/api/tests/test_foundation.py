@@ -1,4 +1,5 @@
 from datetime import timedelta
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 from django.utils import timezone
@@ -63,6 +64,14 @@ def test_issuing_token_prunes_expired_sessions():
     fresh = issue_token(user)
     assert expired not in _tokens
     assert fresh in _tokens
+
+
+def test_concurrent_token_issuance_preserves_every_token():
+    user = authenticate("candidate@example.com", "candidate-password")
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        tokens = list(executor.map(lambda _: issue_token(user), range(32)))
+    assert len(_tokens) == len(tokens)
+    assert all(validate_token(token) is user for token in tokens)
 
 
 def test_login_and_protected_route_authorization():
