@@ -72,8 +72,28 @@ class Job:
 class Application:
     id: str
     job_id: str
-    candidate_id: str
+    candidate_id: str | None
     status: str
+    candidate_name: str = ""
+    candidate_email: str = ""
+    cv_name: str = ""
+    cover_letter: str = ""
+    created_at: Any = None
+
+    def to_dict(self) -> dict[str, Any]:
+        result = {
+            "id": self.id,
+            "jobId": self.job_id,
+            "candidateName": self.candidate_name,
+            "candidateEmail": self.candidate_email,
+            "cvName": self.cv_name,
+            "coverLetter": self.cover_letter,
+            "status": self.status.title() if self.status.islower() else self.status,
+            "createdAt": self.created_at.isoformat() if hasattr(self.created_at, "isoformat") else (self.created_at or ""),
+        }
+        if self.candidate_id is not None:
+            result["candidateId"] = self.candidate_id
+        return result
 
 
 @dataclass(frozen=True)
