@@ -655,6 +655,7 @@ Issue: https://github.com/Virgo-Alpha/steadwork/issues/23
 Worktree: `/tmp/steadwork-issue-23` (`issue-23-persistence-requirements`)
 Engineer: `/root/engineer_23`
 Reviewer worktree: `/tmp/steadwork-review-23` (`issue-23-review`), commits `9eabdc4`, `5e1e0e2`
+QA worktree: `/tmp/steadwork-qa-23` (`issue-23-qa`)
 Owned files: `_docs/specs.md`, `_docs/backend-plan.md` only
 Goal: Specify persistence, lifecycle, authorization, and proposed API contracts for the confirmed deferred capabilities and create linked implementation issues only where the contract is sufficiently concrete.
 
