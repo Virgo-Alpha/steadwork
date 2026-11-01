@@ -47,6 +47,27 @@ Run the HTTP integration matrix with DRF's APIClient:
 uv run pytest api/tests/test_api_integration.py
 ```
 
+Run the SQLite-backed HTTP integration suite with a fresh temporary database
+for every test:
+
+```sh
+uv run pytest -q api/tests/test_sqlite_integration.py
+```
+
+The suite overrides `DATABASE_URL` with a file under pytest's `tmp_path`, checks
+that the developer's default `backend/.local-data/steadwork.sqlite3` is
+untouched, then disposes the SQLAlchemy engine and removes the temporary
+database and SQLite sidecar files. It can be run repeatedly without leaving a
+database in the repository. To run the existing in-memory backend tests
+independently of this SQLite suite:
+
+```sh
+uv run pytest -q api/tests --ignore=api/tests/test_sqlite_integration.py
+```
+
+Pytest loads `steadwork.test_settings`, which explicitly selects the
+resettable in-memory store for those existing tests.
+
 Resource routers, domain models, storage and authentication are separate
 modules. SQLAlchemy mappings and generic CRUD repositories live in
 `api/orm.py` and `api/repositories.py`; request middleware opens one session
