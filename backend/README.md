@@ -2,9 +2,9 @@
 
 The backend uses **Django 5 and Django REST Framework** for HTTP routing and
 **SQLAlchemy 2.x** behind `api.store` for application data. SQLite is the
-default persistent store. PostgreSQL and schema migrations are separate future
-tasks. Django's built-in ORM remains disabled; route handlers use the existing
-domain dataclasses through the store boundary.
+default persistent store, managed by Alembic schema migrations. PostgreSQL
+support remains a future task. Django's built-in ORM remains disabled; route
+handlers use the existing domain dataclasses through the store boundary.
 
 ## Run locally
 
