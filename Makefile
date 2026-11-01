@@ -5,7 +5,11 @@ BACKEND_PORT ?= 8000
 STATE_DIR ?= .steadwork
 LOG_DIR ?= $(STATE_DIR)/logs
 
-.PHONY: dev frontend backend install setup stop cleanup
+.PHONY: dev frontend backend install setup stop cleanup e2e test test-fast \
+	e2e-install test-setup test-frontend test-backend
+
+FRONTEND_TEST_COMMAND ?= npm test
+BACKEND_TEST_COMMAND ?= cd backend && uv run pytest -q
 
 dev:
 	@set -eu; \
@@ -55,6 +59,36 @@ install:
 	cd backend && uv sync
 
 setup: install
+
+# The full command intentionally runs each suite in this order: frontend,
+# backend, then the isolated Compose-backed browser suite.
+test:
+	@$(MAKE) --no-print-directory test-frontend || { status=$$?; printf '%s\n' "FAILED: frontend test stage (exit $$status)" >&2; exit "$$status"; }
+	@$(MAKE) --no-print-directory test-backend || { status=$$?; printf '%s\n' "FAILED: backend test stage (exit $$status)" >&2; exit "$$status"; }
+	@$(MAKE) --no-print-directory e2e || { status=$$?; printf '%s\n' "FAILED: Playwright E2E stage (exit $$status)" >&2; exit "$$status"; }
+
+test-fast:
+	@$(MAKE) --no-print-directory test-frontend || { status=$$?; printf '%s\n' "FAILED: frontend test stage (exit $$status)" >&2; exit "$$status"; }
+	@$(MAKE) --no-print-directory test-backend || { status=$$?; printf '%s\n' "FAILED: backend test stage (exit $$status)" >&2; exit "$$status"; }
+
+test-frontend:
+	@printf '%s\n' '== Frontend Vitest and live API integration suite =='
+	@if (cd frontend && STEADWORK_STORE=inmemory $(FRONTEND_TEST_COMMAND)); then :; else status=$$?; printf '%s\n' "Frontend test command failed (exit $$status)" >&2; exit "$$status"; fi
+
+test-backend:
+	@printf '%s\n' '== Backend pytest suite =='
+	@if $(BACKEND_TEST_COMMAND); then :; else status=$$?; printf '%s\n' "Backend pytest command failed (exit $$status)" >&2; exit "$$status"; fi
+
+e2e:
+	@printf '%s\n' '== Playwright E2E suite (isolated Docker Compose project) =='
+	@cd e2e && npm test
+
+e2e-install:
+	@cd e2e && npm ci && PLAYWRIGHT_BROWSERS_PATH=.cache/ms-playwright npx playwright install chromium
+
+test-setup:
+	@$(MAKE) --no-print-directory install
+	@$(MAKE) --no-print-directory e2e-install
 
 stop cleanup:
 	@set -eu; \
