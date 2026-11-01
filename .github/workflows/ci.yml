@@ -1,0 +1,164 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend-tests:
+    name: Frontend tests and build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Install frontend and integration backend dependencies
+        run: npm --prefix frontend ci
+      - name: Install backend runtime used by frontend integration tests
+        working-directory: backend
+        run: uv sync --frozen
+
+      - name: Run frontend tests and live API integration
+        env:
+          STEADWORK_STORE: inmemory
+        run: npm --prefix frontend test
+
+      - name: Typecheck and build frontend
+        run: npm --prefix frontend run build
+
+  backend-tests:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: uv sync --frozen
+
+      - name: Run backend tests
+        working-directory: backend
+        run: uv run pytest -q
+
+  full-validation:
+    name: Full validation and Compose E2E
+    runs-on: ubuntu-latest
+    needs: [frontend-tests, backend-tests]
+    # Fork PRs do not receive repository secrets. Their parallel unit jobs
+    # still run; secret-dependent Compose E2E runs on same-repository PRs
+    # and pushes to main.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            e2e/package-lock.json
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Install test dependencies and Playwright Chromium
+        run: make test-setup
+
+      - name: Check whitespace errors
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
+        run: |
+          if [ "$BASE_SHA" = "$GITHUB_SHA" ]; then
+            BASE_SHA="$(git rev-parse HEAD^)"
+          fi
+          git diff --check "$BASE_SHA"...HEAD
+
+      - name: Validate the root Compose service set
+        env:
+          POSTGRES_DB: ci_check
+          POSTGRES_USER: ci_check
+          POSTGRES_PASSWORD: config-only-placeholder
+        run: |
+          services="$(docker compose config --services | sort)"
+          expected="$(printf 'app\npostgres')"
+          if [ "$services" != "$expected" ]; then
+            printf 'Unexpected Compose services:\n%s\n' "$services" >&2
+            exit 1
+          fi
+
+      - name: Build the application image
+        env:
+          POSTGRES_DB: ci_build
+          POSTGRES_USER: ci_build
+          POSTGRES_PASSWORD: build-only-placeholder
+        run: docker compose build app
+
+      - name: Run all tests, including isolated Compose E2E
+        env:
+          E2E_CANDIDATE_EMAIL: ${{ secrets.E2E_CANDIDATE_EMAIL }}
+          E2E_CANDIDATE_PASSWORD: ${{ secrets.E2E_CANDIDATE_PASSWORD }}
+          E2E_RECRUITER_EMAIL: ${{ secrets.E2E_RECRUITER_EMAIL }}
+          E2E_RECRUITER_PASSWORD: ${{ secrets.E2E_RECRUITER_PASSWORD }}
+        run: make test
+
+# Future deployment plan only; everything below is a YAML comment and cannot
+# execute. Production deployment must be separately groomed and approved.
+# Prefer AWS with a narrowly scoped GitHub OIDC role; consider Render and
+# Vercel as alternatives. Use Terraform where practical. Begin with this one
+# unified CI workflow, then consider separate development and production
+# branches after the deployment path is established. Any future deployment
+# should verify the service with GET /api/health/ and fail clearly when it is
+# unhealthy. Add OTel, Prometheus, Grafana, alerting, and an on-call engineer
+# agent only as separately approved future work.
