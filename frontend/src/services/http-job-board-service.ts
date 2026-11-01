@@ -1,7 +1,7 @@
 import type { AccountRegistration, Application, ApplicationInput, ApplicationStatus, CandidateProfile, Company, EmployerDashboard, Job, JobFilters, JobStatus, LoginInput, Notification, User } from '../domain/types';
 import type { JobBoardService } from './job-board-service';
+import { ACCESS_TOKEN_KEY } from './session';
 
-const TOKEN_KEY = 'steadwork.access_token';
 const USER_KEY = 'steadwork.user';
 
 export class ApiError extends Error {
@@ -39,7 +39,7 @@ async function request<T>(path: string, init: RequestInit = {}, options: { prote
   const headers = new Headers(init.headers);
   if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   if (options.protected) {
-    const token = storage()?.getItem(TOKEN_KEY);
+    const token = storage()?.getItem(ACCESS_TOKEN_KEY);
     if (token) headers.set('Authorization', `Bearer ${token}`);
   }
   const response = await fetch(`/api${path}`, { ...init, headers });
@@ -50,7 +50,7 @@ async function request<T>(path: string, init: RequestInit = {}, options: { prote
       if (body && typeof body.detail === 'string') detail = body.detail;
     } catch { /* non-JSON errors use the status fallback */ }
     if (response.status === 401) {
-      storage()?.removeItem(TOKEN_KEY);
+      storage()?.removeItem(ACCESS_TOKEN_KEY);
       storage()?.removeItem(USER_KEY);
     }
     const fallback = response.status === 400 ? 'The request was invalid.'
@@ -95,7 +95,7 @@ export class HttpJobBoardService implements JobBoardService {
     const token = body.access_token;
     if (typeof token !== 'string' || !token || typeof body.token_type !== 'string') throw new Error('Invalid login response.');
     const user = one<User>('user', ['id', 'email', 'role'])(body.user);
-    storage()?.setItem(TOKEN_KEY, token);
+    storage()?.setItem(ACCESS_TOKEN_KEY, token);
     storage()?.setItem(USER_KEY, JSON.stringify(user));
     return user;
   }

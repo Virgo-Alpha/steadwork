@@ -2,6 +2,7 @@ import { useEffect, useState, type CSSProperties, type FormEvent, type ReactNode
 import { Link, Route, Switch, useLocation, useParams, Router as WouterRouter } from 'wouter';
 import { ArrowDownUp, ArrowLeft, ArrowRight, Bell, Bookmark, BriefcaseBusiness, Check, CircleUserRound, ClipboardList, ExternalLink, Filter, MapPin, Search, Sparkles, TrendingUp, Users, X } from 'lucide-react';
 import { jobBoardService as service } from '@/services';
+import { hasSessionToken } from '@/services/session';
 import type { Application, ApplicationStatus, CandidateProfile, Job, JobFilters, JobStatus, Notification, User } from '@/domain/types';
 
 function useLoad<T>(loader: () => Promise<T>, deps: unknown[] = []) {
@@ -14,9 +15,6 @@ function useLoad<T>(loader: () => Promise<T>, deps: unknown[] = []) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...deps, tick]);
   return { data, error, loading, reload, setData };
-}
-function hasSessionToken() {
-  return typeof window !== 'undefined' && Boolean(window.sessionStorage.getItem('steadwork.access_token'));
 }
 function isEmployerRole(role: User['role'] | string) {
   return role === 'company' || role === 'recruiter' || role === 'admin';
@@ -118,7 +116,7 @@ function HomePage() {
   const [savedIds, setSavedIds] = useState<string[]>([]);
   const [error, setError] = useState('');
   const { data: jobs, loading, reload } = useLoad(() => service.listJobs(form), [JSON.stringify(form)]);
-  const { data: saved, error: savedError, reload: reloadSaved } = useLoad(() => service.listSavedJobs());
+  const { data: saved, error: savedError, reload: reloadSaved } = useLoad(() => hasSessionToken() ? service.listSavedJobs() : Promise.resolve([]));
   const { data: recommended } = useLoad(() => service.recommendJobs());
   const { data: companies } = useLoad(() => service.listCompanies());
   useEffect(() => setSavedIds(saved?.map(x => x.id) || []), [saved]);
@@ -178,8 +176,8 @@ function ErrorState({ message, retry }: { message: string; retry: () => void }) 
 function JobDetailPage() {
   const { id = '' } = useParams();
   const { data: job, loading, reload } = useLoad(() => service.getJob(id), [id]);
-  const { data: user } = useLoad(() => service.getCurrentUser());
-  const { data: profile } = useLoad(() => service.getProfile());
+  const { data: user } = useLoad(() => hasSessionToken() ? service.getCurrentUser() : Promise.resolve(null));
+  const { data: profile } = useLoad(() => hasSessionToken() ? service.getProfile() : Promise.resolve(null));
   const [company, setCompany] = useState<{ name: string; description: string; website: string; logo: string; accent: string } | null>(null);
   const [saved, setSaved] = useState(false);
   const [applyOpen, setApplyOpen] = useState(false);
@@ -187,7 +185,10 @@ function JobDetailPage() {
   const [feedback, setFeedback] = useState('');
   const [err, setErr] = useState('');
   useEffect(() => { if (job) service.getCompany(job.companyId).then(c => c && setCompany(c)).catch(reason => setFeedback(reason instanceof Error ? reason.message : 'Could not load company details.')); }, [job]);
-  useEffect(() => { service.listSavedJobs().then(xs => setSaved(xs.some(x => x.id === id))).catch(reason => setFeedback(reason instanceof Error ? reason.message : 'Could not load saved roles.')); }, [id]);
+  useEffect(() => {
+    if (!hasSessionToken()) return;
+    service.listSavedJobs().then(xs => setSaved(xs.some(x => x.id === id))).catch(reason => setFeedback(reason instanceof Error ? reason.message : 'Could not load saved roles.'));
+  }, [id]);
   if (loading) return <div className="main-wrap" style={{ paddingTop: 50 }}><JobSkeleton/></div>;
   if (!job) return <div className="main-wrap page-enter" style={{ paddingTop: 50 }}><EmptyState title="This role has moved on" body="The listing may have closed or the link may be out of date." action={<Link className="btn btn-primary" href="/">Browse open roles</Link>}/></div>;
   const toggleSaved = async () => { try { if (saved) await service.unsaveJob(id); else await service.saveJob(id); setSaved(!saved); setFeedback(saved ? 'Removed from your saved roles' : 'Saved for later'); } catch (reason) { setFeedback(reason instanceof Error ? reason.message : 'Could not update saved roles.'); } };
@@ -234,7 +235,7 @@ function InfoSection({ title, children }: { title: string; children: ReactNode }
 function DetailLine({ label, value }: { label: string; value: string }) { return <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, borderTop: '1px solid hsl(var(--border))', padding: '10px 0', fontSize: 11 }}><span style={{ color: 'hsl(var(--muted-foreground))' }}>{label}</span><strong>{value}</strong></div>; }
 const modalBackdrop: CSSProperties = { position: 'fixed', zIndex: 40, inset: 0, display: 'grid', placeItems: 'center', padding: 16, background: 'hsl(215 31% 12% / .48)' };
 function SavedPage() {
-  const { data, loading, error, reload } = useLoad(() => service.listSavedJobs());
+  const { data, loading, error, reload } = useLoad(() => hasSessionToken() ? service.listSavedJobs() : Promise.resolve([]));
   const [saved, setSaved] = useState<Job[]>([]);
   const [notice, setNotice] = useState('');
   useEffect(() => setSaved(data || []), [data]);
@@ -263,7 +264,7 @@ function ApplicationRow({ application, last, onWithdraw }: { application: Applic
   return <div data-testid={`row-application-${application.id}`} style={{ display: 'grid', gridTemplateColumns: '1fr auto', padding: '18px 20px', gap: 15, borderBottom: last ? 0 : '1px solid hsl(var(--border))', alignItems: 'center' }}><div><Link href={`/jobs/${application.jobId}`} style={{ fontFamily: 'var(--app-font-serif)', fontSize: 16, fontWeight: 800 }}>{job?.title || 'Role application'}</Link><div style={{ fontSize: 12, color: 'hsl(var(--muted-foreground))', marginTop: 5 }}>{application.candidateName} · {new Date(application.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div></div><div style={{ display: 'flex', alignItems: 'center', gap: 12 }}><span className={`status-pill ${color}`} data-testid={`status-application-${application.id}`}>{application.status}</span>{application.status !== 'Withdrawn' && application.status !== 'External click' && <button className="btn btn-quiet" data-testid={`button-withdraw-${application.id}`} onClick={onWithdraw} style={{ fontSize: 11 }}>Withdraw</button>}</div></div>;
 }
 function ProfilePage() {
-  const { data, loading, error, reload } = useLoad(() => service.getProfile());
+  const { data, loading, error, reload } = useLoad(() => hasSessionToken() ? service.getProfile() : Promise.resolve(null));
   const [profile, setProfile] = useState<CandidateProfile | null>(null);
   const [message, setMessage] = useState('');
   useEffect(() => { data && setProfile(data); }, [data]);
