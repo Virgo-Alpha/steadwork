@@ -452,31 +452,44 @@ Description: Provide a two-service Compose configuration for PostgreSQL and the 
 - Update backend docs with startup, logs, reset, and shutdown instructions.
 
 ## 18. Containerize the complete application
-Goal: A single multi-stage image serves the frontend and backend through the two-service Docker Compose stack.
-Description: Create one root `Dockerfile` with a Node build stage for the frontend followed by a Python runtime stage for the backend. Copy the built frontend static files into the backend image, configure the backend to serve them, and use `docker-compose.yaml` with only `postgres` and `app`.
+Status: merged (review approved; QA PASS; post-merge regression passed)
+Issue: https://github.com/Virgo-Alpha/steadwork/issues/18
+Worktree: `/tmp/steadwork-issue-18` (`issue-18-containerize`)
+Engineer: `/root/engineer_18`
+Owned files: root Dockerfile, docker-compose.yaml, backend static serving/configuration, container ignore/build behavior and relevant docs
+Commits: `9975629` (initial implementation), `1fc7692` (cache fix), `97eb90e` (Compose check fix)
+Review worktree: `/tmp/steadwork-review-18c` (`review-18-compose-check`; approved)
+QA worktree: `/tmp/steadwork-qa-18` (`qa-18-containerize`; PASS)
+Merge commit: `3c49692` (`Merge issue #18 complete application image`)
+Goal: A developer can build and run the complete Steadwork application from the repository root with Docker Compose: the browser receives the frontend and its API requests reach the existing backend and PostgreSQL service.
+Description: Add a root multi-stage Dockerfile that builds the Vite frontend and packages its static output with the Python backend. Update the existing two-service Compose configuration so the backend image serves both the frontend and `/api` from one application service.
 
 ## Acceptance criteria
 
-- [ ] The root `Dockerfile` has a frontend Node build stage and a Python backend runtime stage.
-- [ ] The frontend build output is copied into the Python backend image.
-- [ ] The backend serves the frontend static files and routes API requests under `/api`.
-- [ ] `docker-compose.yaml` contains only `postgres` and `app`, and one documented command builds and starts both.
-- [ ] Backend and database readiness checks gate dependent startup.
-- [ ] Required configuration is supplied through environment variables with safe documented defaults.
-- [ ] A clean host can inspect logs, stop the stack and remove development data with documented commands.
-- [ ] Container builds do not include secrets, local databases or unnecessary development artifacts.
+- [x] The root `Dockerfile` has a Node frontend build stage that installs from `frontend/package-lock.json` and runs the frontend production build, followed by a Python backend runtime stage that installs from the committed uv lockfile.
+- [x] The final application image contains the frontend build output and backend runtime; it does not include Node or frontend development dependencies at runtime.
+- [x] With the stack running, `GET /` serves the frontend application and its built assets load successfully.
+- [x] A client-side frontend route such as `/jobs` or a job detail URL serves the frontend entry point on direct navigation; paths under `/api/` continue to return backend responses and are never handled by the frontend fallback.
+- [x] The frontend can use its existing same-origin `/api` requests through the application service; `GET /api/health/` reports the configured PostgreSQL store and a public API request succeeds.
+- [x] Root `docker-compose.yaml` still declares exactly `postgres` and `app`; `app` builds from the root Dockerfile and Compose is the only application runtime service.
+- [x] From a clean checkout with Docker and Compose, one documented root command builds and starts the complete stack without requiring host Node or Python installations.
+- [x] PostgreSQL and application readiness checks remain active, and the application does not report healthy until the backend health endpoint succeeds.
+- [x] Required configuration is passed through environment variables or the ignored local `.env` file, and `.env.example` documents the required names without credentials; no usable credentials, local databases, virtual environments, `node_modules`, or build/test artifacts enter the image.
+- [x] Documentation provides copyable commands to build/start, inspect app and database logs, stop while preserving the named database volume, and remove the development volume.
 
 ## Out of scope
 
-- Full end-to-end flow tests, covered by #19.
-- CI workflow configuration, covered by #21.
+- Browser end-to-end coverage of user journeys, covered by [#19](https://github.com/Virgo-Alpha/steadwork/issues/19).
+- Continuous integration workflow configuration, covered by [#21](https://github.com/Virgo-Alpha/steadwork/issues/21).
+- The complete contributor README and project overview, covered by [#22](https://github.com/Virgo-Alpha/steadwork/issues/22).
 
 ## Constraints
 
-- Reuse the two-service PostgreSQL Compose setup from #17.
-- Keep frontend build and backend runtime concerns in separate Dockerfile stages, not separate Compose services.
-- Do not require global runtime installations beyond Docker/Compose.
-- Use the backend image as the only application image.
+- Reuse the PostgreSQL Compose setup from [#17](https://github.com/Virgo-Alpha/steadwork/issues/17), keeping exactly the `postgres` and `app` services.
+- Keep frontend build and Python runtime in separate stages of the root Dockerfile; the final runtime uses the backend image only.
+- Use the existing Vite output and lockfiles; keep API paths under `/api` and support frontend client-side route fallback without swallowing API or missing static asset requests.
+- Do not require global Node or Python installations on the host.
+- Do not add secrets, local databases, dependency caches, or test/build artifacts to the image.
 
 ## 19. Add full application-flow integration tests
 Goal: Playwright verifies both complete application flows against `docker-compose.yaml`.
