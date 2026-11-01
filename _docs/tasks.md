@@ -492,33 +492,45 @@ Description: Add a root multi-stage Dockerfile that builds the Vite frontend and
 - Do not add secrets, local databases, dependency caches, or test/build artifacts to the image.
 
 ## 19. Add full application-flow integration tests
-Goal: Playwright verifies both complete application flows against `docker-compose.yaml`.
-Description: Put Playwright tests in the repository-root `e2e/` directory and run them against the two-service Compose stack. Cover the existing job-board journey and the requested two-session interviewer/candidate canvas journey, including shared-session visibility and cleanup.
+Status: merged (review approved; QA PASS; post-merge E2E regression passed)
+Issue: https://github.com/Virgo-Alpha/steadwork/issues/19
+Worktree: `/tmp/steadwork-issue-19` (`issue-19-playwright-e2e`)
+Engineer: `/root/engineer_19`
+Owned files: repository-root `e2e/` tests/config/dependencies and test-only documentation if needed
+Commit: `5725a26` (`Add Playwright job-board E2E harness`)
+Review worktree: `/tmp/steadwork-review-19` (`review-19-playwright-e2e`; approved)
+QA worktree: `/tmp/steadwork-qa-19` (`qa-19-playwright-e2e`; PASS)
+Merge commit: `ae55858` (`Merge issue #19 Playwright E2E harness`)
+Goal: Verify the supported job-board journey through the running application: a visitor discovers a seeded role, a candidate applies, and an employer reviews the application and changes its status.
+Description: Add Playwright browser tests in the repository-root `e2e/` directory and run them against the app served by the two-service Compose stack.
 
 ## Acceptance criteria
 
-- [ ] Playwright tests live in the repository-root `e2e/` directory.
-- [ ] The test harness starts `docker-compose.yaml` and waits for `postgres` and `app` readiness.
-- [ ] A visitor can discover a seeded job through the frontend-facing interface.
-- [ ] A candidate can authenticate, apply, view the application and receive an updated status.
-- [ ] An employer can review that application and change its status.
-- [ ] Session 1 logs in as the interviewer and creates an interview session.
-- [ ] Session 1 shares a join link, and session 2 joins as the candidate.
-- [ ] Session 2 changes the canvas, and session 1 visibly observes the change.
-- [ ] At least one unauthorized or invalid action is verified as rejected and visible.
-- [ ] The harness always cleans up containers and volumes after success or failure.
+- [x] Playwright browser tests live in the repository-root `e2e/` directory and run against the application served by the Compose stack from #18.
+- [x] The harness starts an isolated Compose project with a fresh named database volume, waits for PostgreSQL and application health, and uses the app's browser-facing URL.
+- [x] An unauthenticated visitor opens the frontend, sees a seeded published job, opens its details, and sees the application action.
+- [x] A candidate signs in through the UI using seeded local demo credentials, submits an application to a seeded published internal job, and sees that application with status `Applied` in the candidate application view.
+- [x] In a separate browser context, the seeded recruiter signs in, finds the submitted application in the employer flow, and changes its status to `Under Review`.
+- [x] The candidate context observes `Under Review` in the candidate application view after refresh or navigation, demonstrating the update persisted through the application API.
+- [x] An unauthorized candidate attempt to open employer application data is rejected and the frontend shows the access error without exposing the application list.
+- [x] Browser contexts do not share authentication state; the visitor remains unauthenticated while candidate and recruiter actions occur in their own contexts.
+- [x] The E2E assertions use browser-visible behavior and application HTTP responses; they do not query the database directly.
+- [x] Harness cleanup removes the test Compose project and its named volume after success, assertion failure, startup failure, or interruption, without stopping or deleting another Compose project.
 
 ## Out of scope
 
-- Writing the unified local test command, covered by #20.
-- CI-specific caching and workflow policy, covered by #21.
+- The requested interviewer/candidate session and shared-canvas journey is not supported by the current job-board app or product specifications; it is tracked for product/contract definition in [#24](https://github.com/Virgo-Alpha/steadwork/issues/24).
+- A unified command that runs all suites, covered by [#20](https://github.com/Virgo-Alpha/steadwork/issues/20).
+- CI workflow configuration, covered by [#21](https://github.com/Virgo-Alpha/steadwork/issues/21).
 
 ## Constraints
 
-- Use the exact `docker-compose.yaml` and application image from #18.
-- Do not bypass the frontend/backend boundary with direct database assertions.
-- Use isolated test data and avoid committed credentials.
-- Use Playwright browser contexts or equivalent separate clients for sessions 1 and 2.
+- Use the exact root `docker-compose.yaml` and application image from [#18](https://github.com/Virgo-Alpha/steadwork/issues/18); do not add a third Compose service.
+- Use separate Playwright browser contexts for visitor, candidate and recruiter sessions.
+- Read seeded local-only test account values from environment variables; do not embed credentials in test source or commit generated `.env` files.
+- Exercise the frontend-facing application; do not bypass it with direct database assertions.
+- Use an isolated Compose project name and test volume, and never remove a developer's normal database volume.
+- Keep E2E test dependencies and configuration inside repository-root `e2e/`; the later unified-test task may invoke this harness.
 
 ## 20. Create one command for all unit and integration tests
 Goal: A single documented command runs all checks, with `make e2e` dedicated to Compose-backed Playwright tests.
@@ -627,3 +639,29 @@ Description: Inventory deferred team management, CV metadata/lifecycle, external
 - Use `_docs/specs.md` and `_docs/backend-plan.md` as source requirements.
 - Keep the current API and schema stable until feature contracts are agreed.
 - Do not choose file or email storage infrastructure without a product decision.
+
+## 24. Define requirements for collaborative interview sessions and canvas
+Status: backlog
+Issue: https://github.com/Virgo-Alpha/steadwork/issues/24
+Goal: Decide whether Steadwork should support interviewer and candidate interview sessions with a shared canvas, and define the product and technical contract before implementation.
+
+## Acceptance criteria
+
+- [ ] Product scope states whether collaborative interview sessions and a shared canvas belong in Steadwork.
+- [ ] If in scope, requirements identify interviewer and candidate roles, session creation, invitation/join behavior, session ownership, and access after a link is shared.
+- [ ] Requirements define session lifecycle, link expiry/revocation, authentication and authorization, and behavior when a participant disconnects or a session ends.
+- [ ] Requirements define which canvas changes participants can make, how other participants observe them, and whether session/canvas state persists or is discarded.
+- [ ] Privacy, data retention, cleanup, invalid/unauthorized actions, and relevant accessibility expectations are documented.
+- [ ] The approved decisions and unresolved choices are recorded in the product/backend specifications; implementation work is split into issues with acceptance criteria and dependencies if the feature is approved.
+- [ ] This task changes no application code, API implementation, database schema, or runtime infrastructure.
+
+## Out of scope
+
+- Implementing interview sessions or a shared canvas; that work will be specified and split into implementation issues here if approved.
+- Job-board Playwright coverage, covered by [#19](https://github.com/Virgo-Alpha/steadwork/issues/19).
+
+## Constraints
+
+- Use existing product and backend specifications as source material.
+- Do not assume a real-time transport, persistence policy, or security model before the product decisions are recorded.
+- Keep the job-board MVP API and schema unchanged.
