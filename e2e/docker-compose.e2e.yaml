@@ -1,0 +1,6 @@
+services:
+  app:
+    environment:
+      STEADWORK_TEST_CLEAN_APPLICATIONS: "1"
+    ports: !override
+      - "127.0.0.1:${E2E_PORT:?set E2E_PORT}:${E2E_CONTAINER_PORT:-8000}"
