@@ -17,6 +17,7 @@ out-tsc
 # dependencies
 node_modules
 .venv/
+.steadwork/
 __pycache__/
 .pytest_cache/
 *.py[cod]
