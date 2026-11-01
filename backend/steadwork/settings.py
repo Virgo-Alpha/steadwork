@@ -3,6 +3,9 @@ from pathlib import Path
 from api.database import get_database_url, get_store_backend
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+FRONTEND_STATIC_DIR = Path(
+    os.environ.get("STEADWORK_FRONTEND_DIR", BASE_DIR.parent / "frontend" / "dist" / "public")
+)
 SECRET_KEY = "development-only-not-for-production"
 DEBUG = True
 ALLOWED_HOSTS = [host.strip() for host in os.environ.get("DJANGO_ALLOWED_HOSTS", "").split(",") if host.strip()]

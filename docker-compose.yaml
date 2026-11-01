@@ -15,16 +15,13 @@ services:
       start_period: 5s
 
   app:
-    image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
-    working_dir: /workspace/backend
-    volumes:
-      - ./backend:/workspace/backend
+    build:
+      context: .
+      dockerfile: Dockerfile
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:?set POSTGRES_USER in .env}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:?set POSTGRES_DB in .env}
       STEADWORK_STORE: postgresql
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
-      UV_PROJECT_ENVIRONMENT: /tmp/steadwork-venv
-    command: ["sh", "-c", "uv sync --frozen && uv run alembic upgrade head && uv run python manage.py runserver 0.0.0.0:8000"]
     depends_on:
       postgres:
         condition: service_healthy
