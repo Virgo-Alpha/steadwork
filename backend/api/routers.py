@@ -466,7 +466,7 @@ def employer_application_status(request, application_id):
     if app is None or job is None:
         return Response({"detail": "Application not found."}, status=404)
     target = request.data.get("status")
-    allowed = {"Applied": {"Under Review"}, "Under Review": {"Shortlisted", "Rejected"}, "Shortlisted": {"Hired"}}
+    allowed = {"Applied": {"Under Review"}, "Under Review": {"Shortlisted", "Rejected"}, "Shortlisted": {"Hired", "Rejected"}}
     if target not in allowed.get(app.status, set()):
         return _bad("Invalid application status transition.")
     updated = replace(app, status=target)

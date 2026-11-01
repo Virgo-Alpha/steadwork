@@ -101,6 +101,16 @@ def test_application_status_and_notifications_are_scoped():
     assert recruiter.post(f"/api/notifications/{notification_id}/read/", format="json").status_code == 404
 
 
+def test_shortlisted_application_can_be_rejected():
+    recruiter = logged_in()
+    app_id = get_store().applications[0].id
+    assert recruiter.post(f"/api/employer/applications/{app_id}/status/", {"status": "Under Review"}, format="json").status_code == 200
+    assert recruiter.post(f"/api/employer/applications/{app_id}/status/", {"status": "Shortlisted"}, format="json").status_code == 200
+    rejected = recruiter.post(f"/api/employer/applications/{app_id}/status/", {"status": "Rejected"}, format="json")
+    assert rejected.status_code == 200
+    assert rejected.json()["status"] == "Rejected"
+
+
 def test_non_member_cannot_use_employer_api():
     candidate = logged_in("candidate@example.com", "candidate-password")
     assert candidate.get("/api/employer/dashboard/").status_code == 403
