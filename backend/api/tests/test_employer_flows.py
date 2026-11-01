@@ -44,6 +44,27 @@ def test_job_lifecycle_requires_fields_and_deadline():
     assert client.post(f"/api/employer/jobs/{job_id}/status/", {"status": "Draft"}, format="json").status_code == 400
 
 
+def test_published_close_and_expire_require_correct_deadline_rules():
+    client = logged_in()
+    future = (timezone.now() + timezone.timedelta(days=2)).isoformat()
+    created = client.post("/api/employer/jobs/", {
+        "title": "Closable role", "description": "Work", "location": "Remote", "deadline": future,
+    }, format="json")
+    job_id = created.json()["id"]
+    assert client.post(f"/api/employer/jobs/{job_id}/status/", {"status": "Published"}, format="json").status_code == 200
+    assert client.post(f"/api/employer/jobs/{job_id}/status/", {"status": "Closed"}, format="json").status_code == 200
+
+    expired = client.post("/api/employer/jobs/", {
+        "title": "Expiring role", "description": "Work", "location": "Remote",
+        "deadline": (timezone.now() - timezone.timedelta(days=1)).isoformat(),
+    }, format="json")
+    expired_id = expired.json()["id"]
+    assert client.post(f"/api/employer/jobs/{expired_id}/status/", {"status": "Published"}, format="json").status_code == 400
+    store_job = next(job for job in get_store().jobs if job.id == expired_id)
+    store_job.status = "Published"
+    assert client.post(f"/api/employer/jobs/{expired_id}/status/", {"status": "Expired"}, format="json").status_code == 200
+
+
 def test_application_status_and_notifications_are_scoped():
     recruiter = logged_in()
     candidate = logged_in("candidate@example.com", "candidate-password")

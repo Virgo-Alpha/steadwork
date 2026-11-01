@@ -431,7 +431,8 @@ def employer_job_status(request, job_id):
     now = datetime.now(dt_timezone.utc)
     deadline = _utc(job.deadline) if job.deadline else None
     valid = ((job.status == "Draft" and target == "Published" and deadline and deadline > now and job.title and job.description and job.location) or
-             (job.status == "Published" and target in {"Closed", "Expired"} and (target == "Expired" or (deadline and deadline <= now))) or
+             (job.status == "Published" and target == "Closed") or
+             (job.status == "Published" and target == "Expired" and deadline and deadline <= now) or
              (job.status == "Closed" and target == "Published" and deadline and deadline > now) or
              (job.status == "Expired" and target == "Published" and deadline and deadline > now))
     if not valid:
