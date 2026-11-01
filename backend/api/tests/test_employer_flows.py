@@ -65,6 +65,21 @@ def test_published_close_and_expire_require_correct_deadline_rules():
     assert client.post(f"/api/employer/jobs/{expired_id}/status/", {"status": "Expired"}, format="json").status_code == 200
 
 
+def test_republishing_requires_required_job_fields():
+    client = logged_in()
+    job = client.post("/api/employer/jobs/", {
+        "title": "Republishable role", "description": "Work", "location": "Remote",
+        "deadline": (timezone.now() + timezone.timedelta(days=2)).isoformat(),
+    }).json()
+    job_id = job["id"]
+    assert client.post(f"/api/employer/jobs/{job_id}/status/", {"status": "Published"}).status_code == 200
+    assert client.patch(f"/api/employer/jobs/{job_id}/", {
+        "title": "", "description": "", "location": "",
+    }).status_code == 200
+    assert client.post(f"/api/employer/jobs/{job_id}/status/", {"status": "Closed"}).status_code == 200
+    assert client.post(f"/api/employer/jobs/{job_id}/status/", {"status": "Published"}).status_code == 400
+
+
 def test_application_status_and_notifications_are_scoped():
     recruiter = logged_in()
     candidate = logged_in("candidate@example.com", "candidate-password")

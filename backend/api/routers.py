@@ -430,11 +430,12 @@ def employer_job_status(request, job_id):
         return _bad("Invalid status.")
     now = datetime.now(dt_timezone.utc)
     deadline = _utc(job.deadline) if job.deadline else None
-    valid = ((job.status == "Draft" and target == "Published" and deadline and deadline > now and job.title and job.description and job.location) or
+    publishable = all(isinstance(value, str) and value.strip() for value in (job.title, job.description, job.location))
+    valid = ((job.status == "Draft" and target == "Published" and deadline and deadline > now and publishable) or
              (job.status == "Published" and target == "Closed") or
              (job.status == "Published" and target == "Expired" and deadline and deadline <= now) or
-             (job.status == "Closed" and target == "Published" and deadline and deadline > now) or
-             (job.status == "Expired" and target == "Published" and deadline and deadline > now))
+             (job.status == "Closed" and target == "Published" and deadline and deadline > now and publishable) or
+             (job.status == "Expired" and target == "Published" and deadline and deadline > now and publishable))
     if not valid:
         return _bad("Invalid job status transition.")
     index = get_store().jobs.index(job)
