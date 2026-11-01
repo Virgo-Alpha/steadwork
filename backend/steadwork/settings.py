@@ -1,4 +1,5 @@
 from pathlib import Path
+from api.database import get_database_url, get_store_backend
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = "development-only-not-for-production"
@@ -14,11 +15,14 @@ INSTALLED_APPS = [
 ]
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "api.middleware.SQLiteStoreMiddleware",
 ]
 
-# The skeleton deliberately has no persistence dependency. A real database is
-# introduced by the persistence task, not by this application bootstrap.
+# Django's own ORM remains unused; application persistence is mediated by the
+# SQLAlchemy repository behind api.store.
 DATABASES = {"default": {"ENGINE": "django.db.backends.dummy"}}
+STORE_BACKEND = get_store_backend()
+DATABASE_URL = get_database_url()
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 USE_TZ = True
