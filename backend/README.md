@@ -117,14 +117,13 @@ POSTGRES_USER=steadwork
 POSTGRES_PASSWORD=$(openssl rand -hex 24)
 DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
 EOF
-docker compose up -d
+docker compose up --build -d
 ```
 
-Compose starts only PostgreSQL and the API. The API waits for PostgreSQL readiness, applies `uv run alembic upgrade head`, and then starts Django. Its health check calls the API readiness endpoint and verifies it is backed by PostgreSQL. The first API request on an empty database inserts the deterministic local demo data once. Existing records are retained.
+Compose builds the root multi-stage `Dockerfile`, then starts only PostgreSQL and the application. The Node build stage runs the Vite production build; the Python runtime stage serves those static files and the `/api/` routes from Django without Node installed. Direct frontend routes such as `/jobs` return the SPA entrypoint, while API routes and missing asset paths remain backend/404 responses. The app waits for PostgreSQL, applies `uv run alembic upgrade head`, then starts Django; its health check verifies the PostgreSQL-backed API is ready. The first API request on an empty database inserts deterministic local demo data once. Existing records are retained.
 
 ```sh
-docker compose logs -f app
-docker compose logs -f postgres
+docker compose logs -f app postgres
 docker compose down                 # stop and preserve the postgres-data volume
 docker compose down -v              # destructive: delete the database volume and all its data
 ```
