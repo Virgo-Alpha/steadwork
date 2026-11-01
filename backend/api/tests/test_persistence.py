@@ -22,6 +22,7 @@ from api.orm import (
 )
 from api.repositories import Repository, SQLAlchemyStoreRepository
 from api.store import _seed
+from api.tests.migration_helpers import upgrade_database
 
 
 def test_default_database_is_an_ignored_local_sqlite_file():
@@ -46,7 +47,9 @@ def test_database_url_override_and_invalid_backend():
 def test_repository_crud_for_every_persisted_entity(tmp_path):
     from api.repositories import create_database
 
-    engine, factory = create_database(f"sqlite:///{tmp_path / 'crud.sqlite3'}")
+    database_url = f"sqlite:///{tmp_path / 'crud.sqlite3'}"
+    upgrade_database(database_url)
+    engine, factory = create_database(database_url)
     with factory() as session:
         repositories = {
             model: Repository(session, model)
@@ -141,7 +144,9 @@ def test_repository_crud_for_every_persisted_entity(tmp_path):
 def test_store_repository_round_trips_all_domain_data_and_updates(tmp_path):
     from api.repositories import create_database
 
-    engine, factory = create_database(f"sqlite:///{tmp_path / 'store.sqlite3'}")
+    database_url = f"sqlite:///{tmp_path / 'store.sqlite3'}"
+    upgrade_database(database_url)
+    engine, factory = create_database(database_url)
     with factory() as session:
         repository = SQLAlchemyStoreRepository(session)
         repository.replace(_seed())
@@ -176,7 +181,9 @@ def test_store_repository_round_trips_all_domain_data_and_updates(tmp_path):
 def test_stale_request_diff_cannot_erase_a_newer_committed_mutation(tmp_path):
     from api.repositories import create_database
 
-    engine, factory = create_database(f"sqlite:///{tmp_path / 'stale-request.sqlite3'}")
+    database_url = f"sqlite:///{tmp_path / 'stale-request.sqlite3'}"
+    upgrade_database(database_url)
+    engine, factory = create_database(database_url)
     with factory() as session:
         repository = SQLAlchemyStoreRepository(session)
         initial = repository.load()
@@ -214,6 +221,7 @@ def test_sqlite_requests_keep_api_behavior_and_close_sessions_after_errors(tmp_p
     from api.middleware import _database
 
     database_url = f"sqlite:///{tmp_path / 'api.sqlite3'}"
+    upgrade_database(database_url)
     _database.cache_clear()
     try:
         with override_settings(STORE_BACKEND="sqlite", DATABASE_URL=database_url):

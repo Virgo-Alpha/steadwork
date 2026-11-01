@@ -14,6 +14,7 @@ from api.middleware import _database
 from api.database import get_database_url
 from api.orm import ApplicationRecord, JobRecord
 from api.repositories import Repository
+from api.tests.migration_helpers import upgrade_database
 
 
 @pytest.fixture
@@ -23,6 +24,7 @@ def sqlite_api(tmp_path):
     default_database = Path(make_url(get_database_url({})).database)
     default_state = default_database.stat().st_mtime_ns if default_database.exists() else None
     _database.cache_clear()
+    upgrade_database(database_url)
     with override_settings(STORE_BACKEND="sqlite", DATABASE_URL=database_url):
         try:
             yield APIClient(), database_path, database_url
@@ -62,9 +64,9 @@ def application_body(email, job_id="job-design"):
 def test_sqlite_http_state_survives_new_request_sessions_and_is_isolated(sqlite_api):
     client, database_path, _database_url = sqlite_api
 
-    # The database is unique to this test, seeded by the first successful API
-    # request, and never points at the developer's local-data file.
-    assert not database_path.exists()
+    # Migrations create a unique, empty database for this test; the first API
+    # request seeds it, and it never points at developer local data.
+    assert database_path.exists()
     assert client.get("/api/jobs/").status_code == 200
     assert database_path.exists()
     assert ".local-data" not in str(database_path)

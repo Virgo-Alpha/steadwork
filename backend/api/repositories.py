@@ -4,7 +4,10 @@ from pathlib import Path
 
 from sqlalchemy import delete, event, select
 from sqlalchemy.engine import make_url
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import inspect
+from alembic.config import Config
+from alembic.migration import MigrationContext
+from alembic.script import ScriptDirectory
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy import create_engine
 
@@ -17,7 +20,7 @@ from .orm import (
 
 
 def create_database(url: str | None = None):
-    """Create SQLite engine/session factory and ensure the current schema exists."""
+    """Create an engine only when Alembic has initialized the current schema."""
     url = get_database_url({"DATABASE_URL": url}) if url is not None else get_database_url()
     parsed = make_url(url)
     if parsed.drivername not in {"sqlite", "sqlite+pysqlite"}:
@@ -33,7 +36,28 @@ def create_database(url: str | None = None):
         cursor.execute("PRAGMA busy_timeout=30000")
         cursor.close()
 
-    Base.metadata.create_all(engine)
+    config_path = Path(__file__).resolve().parents[1] / "alembic.ini"
+    config = Config(str(config_path))
+    config.set_main_option("sqlalchemy.url", url.replace("%", "%%"))
+    config.attributes["database_url"] = url
+    expected_head = ScriptDirectory.from_config(config).get_current_head()
+    try:
+        with engine.connect() as connection:
+            tables = set(inspect(connection).get_table_names())
+            if "alembic_version" not in tables:
+                current_revision = None
+            else:
+                current_revision = MigrationContext.configure(connection).get_current_revision()
+        missing_tables = set(Base.metadata.tables) - tables
+        if current_revision != expected_head or missing_tables:
+            details = f" Missing tables: {', '.join(sorted(missing_tables))}." if missing_tables else ""
+            raise DatabaseConfigurationError(
+                "SQLite schema is not at the current Alembic revision; run `uv run alembic upgrade head`."
+                + details
+            )
+    except Exception:
+        engine.dispose()
+        raise
     return engine, sessionmaker(bind=engine, expire_on_commit=False, class_=Session)
 
 

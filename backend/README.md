@@ -2,9 +2,9 @@
 
 The backend uses **Django 5 and Django REST Framework** for HTTP routing and
 **SQLAlchemy 2.x** behind `api.store` for application data. SQLite is the
-default persistent store. PostgreSQL and schema migrations are separate future
-tasks. Django's built-in ORM remains disabled; route handlers use the existing
-domain dataclasses through the store boundary.
+default persistent store, managed by Alembic schema migrations. PostgreSQL
+support remains a future task. Django's built-in ORM remains disabled; route
+handlers use the existing domain dataclasses through the store boundary.
 
 ## Run locally
 
@@ -12,15 +12,19 @@ From `backend/`:
 
 ```sh
 uv sync
+uv run alembic upgrade head
 uv run python manage.py runserver
 ```
 
-By default the first API request creates `backend/.local-data/steadwork.sqlite3`
-and seeds the deterministic demo data once. The ignored local-data directory
-must remain untracked. To use another SQLite file, set `DATABASE_URL` before
-starting the server, for example:
+Alembic creates the schema in `backend/.local-data/steadwork.sqlite3`; the first
+API request seeds deterministic demo data. The ignored local-data directory
+must remain untracked. Django startup checks that the database is at the
+current Alembic head and fails with an upgrade command if the schema is missing
+or outdated. To migrate and run against another SQLite file, set `DATABASE_URL`
+for both commands, for example:
 
 ```sh
+DATABASE_URL=sqlite:////tmp/steadwork.sqlite3 uv run alembic upgrade head
 DATABASE_URL=sqlite:////tmp/steadwork.sqlite3 uv run python manage.py runserver
 ```
 
@@ -33,6 +37,7 @@ the in-memory store. The smoke endpoint is
 
 ```sh
 uv run pytest
+uv run alembic upgrade head
 uv run python manage.py check
 ```
 
@@ -68,13 +73,27 @@ uv run pytest -q api/tests --ignore=api/tests/test_sqlite_integration.py
 Pytest loads `steadwork.test_settings`, which explicitly selects the
 resettable in-memory store for those existing tests.
 
+Schema migration commands (run from `backend/`):
+
+```sh
+uv run alembic revision --autogenerate -m "describe schema change"
+uv run alembic upgrade head
+uv run alembic current
+uv run pytest -q api/tests/test_migrations.py
+```
+
+The migration test suite upgrades empty temporary databases, compares the
+resulting schema against SQLAlchemy metadata, repeats the upgrade, inspects the
+current revision, and verifies the application rejects an unmigrated database
+without creating tables. These tests never use the default local database.
+
 Resource routers, domain models, storage and authentication are separate
 modules. SQLAlchemy mappings and generic CRUD repositories live in
 `api/orm.py` and `api/repositories.py`; request middleware opens one session
 per request, commits successful responses, rolls back failures and closes the
 session. SQLite foreign-key enforcement protects references. Existing records
-are preserved across backend restarts. Schema migration history and upgrade
-commands belong to issue #16 and are not included yet.
+are preserved across backend restarts. The committed Alembic revision creates
+all eight current persistence tables and their keys, indexes, and relationships.
 
 The seed is deterministic: companies `company-acme` and
 `company-orbit`, jobs `job-platform` and `job-design`, and users
