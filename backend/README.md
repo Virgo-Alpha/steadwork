@@ -122,6 +122,8 @@ docker compose up --build -d
 
 Compose builds the root multi-stage `Dockerfile`, then starts only PostgreSQL and the application. The Node build stage runs the Vite production build; the Python runtime stage serves those static files and the `/api/` routes from Django without Node installed. Direct frontend routes such as `/jobs` return the SPA entrypoint, while API routes and missing asset paths remain backend/404 responses. The app waits for PostgreSQL, applies `uv run alembic upgrade head`, then starts Django; its health check verifies the PostgreSQL-backed API is ready. The first API request on an empty database inserts deterministic local demo data once. Existing records are retained.
 
+After building the image, `./scripts/check-container-image.sh` checks that its final stage contains the frontend assets without the build-time uv cache, Node runtime, or backend test/dependency artifacts. Pass a different image name as the first argument when using a custom Compose project name.
+
 ```sh
 docker compose logs -f app postgres
 docker compose down                 # stop and preserve the postgres-data volume

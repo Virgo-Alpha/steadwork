@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1
+
 FROM node:22-alpine AS frontend-build
 
 WORKDIR /build/frontend
@@ -17,7 +19,8 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app/backend
 COPY backend/pyproject.toml backend/uv.lock ./
-RUN uv sync --frozen --no-dev --no-install-project
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --no-install-project
 COPY backend/ ./
 COPY --from=frontend-build /build/frontend/dist/public/ /opt/steadwork/frontend/
 
