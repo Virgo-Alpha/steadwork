@@ -1,6 +1,11 @@
 from django.urls import path
 
-from .routers import admin_probe, candidate_probe, get_company, get_job, health, list_companies, list_jobs, login, recruiter_probe
+from .routers import (
+    admin_probe, candidate_applications, candidate_probe, candidate_profile,
+    create_application, create_guest_application, get_company, get_job, health,
+    list_companies, list_jobs, login, recruiter_probe, saved_jobs,
+    unsave_job, withdraw_application,
+)
 
 urlpatterns = [
     path("health/", health, name="health"),
@@ -15,4 +20,11 @@ urlpatterns = [
     path("protected/recruiter/<str:user_id>/", recruiter_probe, name="recruiter-owned-probe"),
     path("protected/admin/", admin_probe, name="admin-probe"),
     path("protected/admin/<str:user_id>/", admin_probe, name="admin-owned-probe"),
+    path("candidate/profile/", candidate_profile, name="candidate-profile"),
+    path("candidate/applications/", candidate_applications, name="candidate-applications"),
+    path("saved-jobs/", saved_jobs, name="saved-jobs"),
+    path("saved-jobs/<str:job_id>/", unsave_job, name="unsave-job"),
+    path("applications/", create_application, name="create-application"),
+    path("applications/guest/", create_guest_application, name="create-guest-application"),
+    path("applications/<str:application_id>/withdraw/", withdraw_application, name="withdraw-application"),
 ]

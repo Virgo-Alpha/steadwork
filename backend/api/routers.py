@@ -1,10 +1,14 @@
 from datetime import datetime, timezone as dt_timezone
 import math
+from uuid import uuid4
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
 
 from .auth import authenticate, current_user, issue_token
+from dataclasses import replace
+
+from .models import Application
 from .store import application_status, get_store
 
 
@@ -134,6 +138,176 @@ def _protected(request, required_role: str, user_id: str | None = None):
     if user.role != required_role or (user_id is not None and user.id != user_id):
         return Response({"detail": "You do not have permission to perform this action."}, status=403)
     return Response({"user": user.to_dict(), "role": user.role})
+
+
+def _candidate(request):
+    user = current_user(request)
+    if user is None:
+        return None, Response({"detail": "Authentication credentials were not provided."}, status=401)
+    if user.role != "candidate":
+        return None, Response({"detail": "You do not have permission to perform this action."}, status=403)
+    return user, None
+
+
+_PROFILE_DEFAULTS = {
+    "headline": "", "location": "", "skills": [], "experience": "",
+    "education": "", "preferences": "", "cvFiles": [], "defaultCvId": "",
+}
+
+
+@api_view(["GET", "PATCH"])
+def candidate_profile(request):
+    user, error = _candidate(request)
+    if error:
+        return error
+    store = get_store()
+    profile = store.profiles.setdefault(user.id, {"userId": user.id, **_PROFILE_DEFAULTS})
+    if request.method == "GET":
+        return Response(profile)
+    allowed = set(_PROFILE_DEFAULTS) | {"userId"}
+    if set(request.data) - allowed:
+        return _bad("Unknown profile field.")
+    if "userId" in request.data and request.data["userId"] != user.id:
+        return Response({"detail": "Profile ownership cannot be changed."}, status=403)
+    for key in _PROFILE_DEFAULTS:
+        if key not in request.data:
+            continue
+        value = request.data[key]
+        if key in {"skills", "cvFiles"} and (not isinstance(value, list) or not all(isinstance(item, str) for item in value)):
+            return _bad(f"Invalid {key}.")
+        if key not in {"skills", "cvFiles"} and not isinstance(value, str):
+            return _bad(f"Invalid {key}.")
+        profile[key] = value
+    return Response(profile)
+
+
+@api_view(["GET", "POST"])
+def saved_jobs(request):
+    user, error = _candidate(request)
+    if error:
+        return error
+    store = get_store()
+    saved = store.saved_jobs.setdefault(user.id, set())
+    if request.method == "GET":
+        jobs = [job for job in store.jobs if job.id in saved]
+        return Response([job.to_dict() for job in jobs])
+    job_id = request.data.get("jobId")
+    if not isinstance(job_id, str) or not job_id:
+        return _bad("jobId is required.")
+    if not next((job for job in store.jobs if job.id == job_id), None):
+        return Response({"detail": "Job not found."}, status=404)
+    saved.add(job_id)
+    return Response(status=204)
+
+
+@api_view(["DELETE"])
+def unsave_job(request, job_id):
+    user, error = _candidate(request)
+    if error:
+        return error
+    saved = get_store().saved_jobs.setdefault(user.id, set())
+    if job_id not in saved:
+        return Response({"detail": "Saved job not found."}, status=404)
+    saved.remove(job_id)
+    return Response(status=204)
+
+
+@api_view(["GET"])
+def candidate_applications(request):
+    user, error = _candidate(request)
+    if error:
+        return error
+    return Response([app.to_dict() for app in get_store().applications if app.candidate_id == user.id])
+
+
+def _application_input(data):
+    required = ("jobId", "candidateName", "candidateEmail", "cvName", "coverLetter")
+    if any(not isinstance(data.get(key), str) for key in required):
+        return None, _bad("jobId, candidateName, candidateEmail, cvName and coverLetter are required.")
+    values = {key: data[key].strip() if key != "coverLetter" else data[key] for key in required}
+    if any(not values[key] for key in ("jobId", "candidateName", "candidateEmail", "cvName")):
+        return None, _bad("jobId, candidateName, candidateEmail and cvName cannot be empty.")
+    if "@" not in values["candidateEmail"]:
+        return None, _bad("Invalid candidateEmail.")
+    return values, None
+
+
+def _eligible_job(job_id):
+    job = next((item for item in get_store().jobs if item.id == job_id), None)
+    if job is None:
+        return None, Response({"detail": "Job not found."}, status=404)
+    if job.status != "Published" or not job.deadline or _utc(job.deadline) <= datetime.now(dt_timezone.utc):
+        return None, _bad("Applications are closed for this job.")
+    return job, None
+
+
+@api_view(["POST"])
+def create_application(request):
+    user, error = _candidate(request)
+    if error:
+        return error
+    values, error = _application_input(request.data)
+    if error:
+        return error
+    if values["candidateEmail"].casefold() != user.email.casefold():
+        return Response({"detail": "Application candidate does not match the current user."}, status=403)
+    job, error = _eligible_job(values["jobId"])
+    if error:
+        return error
+    email = values["candidateEmail"].casefold()
+    if any(
+        app.job_id == job.id
+        and (app.candidate_id == user.id or app.candidate_email.casefold() == email)
+        for app in get_store().applications
+    ):
+        return Response({"detail": "You have already applied to this job."}, status=409)
+    app = Application(uuid4().hex, job.id, user.id,
+                      "External click" if job.application_method == "External" else "Applied",
+                      values["candidateName"],
+                      values["candidateEmail"].strip(), values["cvName"], values["coverLetter"], datetime.now(dt_timezone.utc))
+    get_store().applications.append(app)
+    job.application_count += 1
+    return Response(app.to_dict(), status=201)
+
+
+@api_view(["POST"])
+def create_guest_application(request):
+    values, error = _application_input(request.data)
+    if error:
+        return error
+    job, error = _eligible_job(values["jobId"])
+    if error:
+        return error
+    email = values["candidateEmail"].casefold()
+    if any(app.job_id == job.id and app.candidate_email.casefold() == email
+           for app in get_store().applications):
+        return Response({"detail": "This email has already been used for this job."}, status=409)
+    app = Application(uuid4().hex, job.id, None,
+                      "External click" if job.application_method == "External" else "Applied",
+                      values["candidateName"],
+                      email, values["cvName"], values["coverLetter"], datetime.now(dt_timezone.utc))
+    get_store().applications.append(app)
+    job.application_count += 1
+    return Response(app.to_dict(), status=201)
+
+
+@api_view(["POST"])
+def withdraw_application(request, application_id):
+    user, error = _candidate(request)
+    if error:
+        return error
+    app = next((item for item in get_store().applications if item.id == application_id), None)
+    if app is None:
+        return Response({"detail": "Application not found."}, status=404)
+    if app.candidate_id != user.id:
+        return Response({"detail": "You do not have permission to withdraw this application."}, status=403)
+    if app.status not in {"Applied", "Under Review", "Shortlisted"}:
+        return _bad("This application cannot be withdrawn.")
+    applications = get_store().applications
+    index = applications.index(app)
+    app = replace(app, status="Withdrawn")
+    applications[index] = app
+    return Response(app.to_dict())
 
 
 @api_view(["GET"])

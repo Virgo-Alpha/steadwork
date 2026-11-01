@@ -13,6 +13,8 @@ class InMemoryStore:
     companies: list[Company]
     jobs: list[Job]
     applications: list[Application]
+    profiles: dict[str, dict]
+    saved_jobs: dict[str, set[str]]
 
 
 def _seed() -> InMemoryStore:
@@ -37,7 +39,10 @@ def _seed() -> InMemoryStore:
                 "External", "https://orbit.example.com/jobs/design", "Published",
                 timezone.now() - timedelta(days=5), timezone.now() + timedelta(days=45), 1),
         ],
-        applications=[Application("application-1", "job-platform", "user-candidate", "applied")],
+        applications=[Application("application-1", "job-platform", "user-candidate", "Applied",
+                                   "Candidate", "candidate@example.com", "candidate.pdf", "", timezone.now())],
+        profiles={},
+        saved_jobs={},
     )
 
 
