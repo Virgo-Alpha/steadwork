@@ -238,8 +238,6 @@ def _eligible_job(job_id):
         return None, Response({"detail": "Job not found."}, status=404)
     if job.status != "Published" or not job.deadline or _utc(job.deadline) <= datetime.now(dt_timezone.utc):
         return None, _bad("Applications are closed for this job.")
-    if job.application_method != "Internal":
-        return None, _bad("This job does not accept internal applications.")
     return job, None
 
 
@@ -256,9 +254,16 @@ def create_application(request):
     job, error = _eligible_job(values["jobId"])
     if error:
         return error
-    if any(app.job_id == job.id and app.candidate_id == user.id for app in get_store().applications):
+    email = values["candidateEmail"].casefold()
+    if any(
+        app.job_id == job.id
+        and (app.candidate_id == user.id or app.candidate_email.casefold() == email)
+        for app in get_store().applications
+    ):
         return Response({"detail": "You have already applied to this job."}, status=409)
-    app = Application(uuid4().hex, job.id, user.id, "Applied", values["candidateName"],
+    app = Application(uuid4().hex, job.id, user.id,
+                      "External click" if job.application_method == "External" else "Applied",
+                      values["candidateName"],
                       values["candidateEmail"].strip(), values["cvName"], values["coverLetter"], datetime.now(dt_timezone.utc))
     get_store().applications.append(app)
     job.application_count += 1
@@ -274,10 +279,12 @@ def create_guest_application(request):
     if error:
         return error
     email = values["candidateEmail"].casefold()
-    if any(app.job_id == job.id and app.candidate_id is None and app.candidate_email.casefold() == email
+    if any(app.job_id == job.id and app.candidate_email.casefold() == email
            for app in get_store().applications):
         return Response({"detail": "This email has already been used for this job."}, status=409)
-    app = Application(uuid4().hex, job.id, None, "Applied", values["candidateName"],
+    app = Application(uuid4().hex, job.id, None,
+                      "External click" if job.application_method == "External" else "Applied",
+                      values["candidateName"],
                       email, values["cvName"], values["coverLetter"], datetime.now(dt_timezone.utc))
     get_store().applications.append(app)
     job.application_count += 1

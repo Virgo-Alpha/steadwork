@@ -49,9 +49,17 @@ def test_registered_and_guest_applications_validate_duplicates_and_lifecycle():
 def test_application_rejects_wrong_role_invalid_fields_and_unavailable_jobs():
     c = client()
     assert c.post("/api/applications/", {"jobId": "job-platform"}, format="json").status_code == 400
-    job = get_store().jobs[0]
-    job.application_method = "External"
-    assert c.post("/api/applications/", {"jobId": job.id, "candidateName": "x", "candidateEmail": "candidate@example.com", "cvName": "x", "coverLetter": ""}, format="json").status_code == 400
+    external = get_store().jobs[1]
+    external_body = {"jobId": external.id, "candidateName": "x", "candidateEmail": "candidate@example.com", "cvName": "x", "coverLetter": ""}
+    external_application = c.post("/api/applications/", external_body, format="json")
+    assert external_application.status_code == 201
+    assert external_application.json()["status"] == "External click"
+    assert c.post("/api/applications/", external_body, format="json").status_code == 409
+    guest_external = {**external_body, "candidateEmail": "external-guest@example.com"}
+    guest_application = c.post("/api/applications/guest/", guest_external, format="json")
+    assert guest_application.status_code == 201
+    assert guest_application.json()["status"] == "External click"
+    assert c.post("/api/applications/guest/", guest_external, format="json").status_code == 409
     recruiter = APIClient()
     login = recruiter.post("/api/auth/login/", {"email": "recruiter@example.com", "password": "recruiter-password"}, format="json")
     recruiter.credentials(HTTP_AUTHORIZATION=f"Bearer {login.json()['access_token']}")
