@@ -1,5 +1,6 @@
 """Deterministic, resettable in-memory storage boundary."""
 
+import os
 from dataclasses import dataclass
 from datetime import timedelta
 from django.utils import timezone
@@ -41,8 +42,10 @@ def _seed() -> InMemoryStore:
                 "External", "https://orbit.example.com/jobs/design", "Published",
                 timezone.now() - timedelta(days=5), timezone.now() + timedelta(days=45), 1),
         ],
-        applications=[Application("application-1", "job-platform", "user-candidate", "Applied",
-                                   "Candidate", "candidate@example.com", "candidate.pdf", "", timezone.now())],
+        applications=[] if os.getenv("STEADWORK_TEST_CLEAN_APPLICATIONS") == "1" else [
+            Application("application-1", "job-platform", "user-candidate", "Applied",
+                        "Candidate", "candidate@example.com", "candidate.pdf", "", timezone.now())
+        ],
         profiles={},
         saved_jobs={},
         memberships=[

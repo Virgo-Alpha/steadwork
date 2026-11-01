@@ -1,0 +1,191 @@
+import { act } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { spawn, type ChildProcess } from 'node:child_process';
+import { createServer } from 'node:net';
+import path from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
+import App from './App';
+import { ACCESS_TOKEN_KEY } from './services/session';
+
+const originalFetch = globalThis.fetch;
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+let backend: ChildProcess;
+let vite: ChildProcess;
+let backendPort: number;
+let vitePort: number;
+let root: Root;
+let container: HTMLDivElement;
+let serviceExitError: Error | undefined;
+let stopping = false;
+const backendUrl = () => `http://127.0.0.1:${backendPort}`;
+
+const freePort = async () => new Promise<number>((resolve, reject) => {
+  const server = createServer();
+  server.once('error', reject);
+  server.listen(0, '127.0.0.1', () => {
+    const address = server.address();
+    const port = typeof address === 'object' && address ? address.port : 0;
+    server.close(() => resolve(port));
+  });
+});
+
+const waitFor = async (check: () => boolean | Promise<boolean>, timeout = 10_000) => {
+  const started = Date.now();
+  while (!(await check())) {
+    if (serviceExitError) throw serviceExitError;
+    if (Date.now() - started > timeout) throw new Error('Timed out waiting for UI state.');
+    await sleep(50);
+  }
+};
+
+const start = (command: string, args: string[], cwd: string, env: Record<string, string>) => {
+  serviceExitError = undefined;
+  const child = spawn(command, args, { cwd, env: { ...process.env, ...env }, detached: true, stdio: 'ignore' });
+  child.once('error', error => { throw error; });
+  child.once('exit', code => {
+    if (!stopping && code !== null && code !== 0) serviceExitError = new Error(`Service exited unexpectedly with status ${code}.`);
+  });
+  return child;
+};
+
+const stopGroup = (child: ChildProcess | undefined) => {
+  if (child?.pid) process.kill(-child.pid, 'SIGTERM');
+};
+
+const button = (testId: string) => document.querySelector<HTMLButtonElement>(`[data-testid="${testId}"]`)!;
+const click = async (element: Element) => { await act(async () => { element.dispatchEvent(new MouseEvent('click', { bubbles: true })); }); };
+const input = (testId: string, value: string) => {
+  const element = document.querySelector<HTMLInputElement | HTMLTextAreaElement>(`[data-testid="${testId}"]`)!;
+  const prototype = element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+  const setter = Object.getOwnPropertyDescriptor(prototype, 'value')!.set!;
+  setter.call(element, value);
+  element.dispatchEvent(new Event('input', { bubbles: true }));
+  element.dispatchEvent(new Event('change', { bubbles: true }));
+  return element;
+};
+const submit = async (form: HTMLFormElement) => {
+  await act(async () => { form.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true })); });
+};
+const login = async (email: string, password: string) => {
+  await click(document.querySelector('[data-testid="link-sign-in"]')!);
+  await waitFor(() => Boolean(document.querySelector('[data-testid="button-login"]')));
+  input('input-account-email', email);
+  input('input-account-password', password);
+  await submit(document.querySelector('form')!);
+  await waitFor(() => !document.querySelector('[data-testid="button-login"]'));
+  if (document.querySelector('[data-testid="button-demo-verify-email"]')) {
+    window.history.pushState({}, '', '/');
+    await act(async () => { window.dispatchEvent(new PopStateEvent('popstate')); });
+  }
+};
+
+beforeAll(async () => {
+  backendPort = await freePort();
+  vitePort = await freePort();
+  const rootDir = process.cwd();
+  const backendDir = path.resolve(rootDir, '../backend');
+  backend = start(path.join(backendDir, '.venv/bin/python'), ['manage.py', 'runserver', `127.0.0.1:${backendPort}`], backendDir, {
+    STEADWORK_TEST_CLEAN_APPLICATIONS: '1',
+  });
+  await waitFor(async () => {
+    try { return (await originalFetch(`${backendUrl()}/api/health/`)).ok; } catch { return false; }
+  });
+
+  vite = start('/usr/bin/npm', ['run', 'dev', '--', '--host', '127.0.0.1', '--port', String(vitePort)], rootDir, {
+    API_PROXY_TARGET: backendUrl(),
+  });
+  await waitFor(async () => {
+    try { return (await originalFetch(`http://127.0.0.1:${vitePort}/`)).ok; } catch { return false; }
+  });
+  globalThis.fetch = (inputValue, init) => originalFetch(
+    typeof inputValue === 'string' && inputValue.startsWith('/') ? `http://127.0.0.1:${vitePort}${inputValue}` : inputValue,
+    init,
+  );
+});
+
+const resetBackend = async () => {
+  stopGroup(backend);
+  await sleep(100);
+  const backendDir = path.resolve(process.cwd(), '../backend');
+  backend = start(path.join(backendDir, '.venv/bin/python'), ['manage.py', 'runserver', `127.0.0.1:${backendPort}`], backendDir, {
+    STEADWORK_TEST_CLEAN_APPLICATIONS: '1',
+  });
+  await waitFor(async () => { try { return (await originalFetch(`${backendUrl()}/api/health/`)).ok; } catch { return false; } });
+};
+
+afterAll(() => {
+  stopping = true;
+  globalThis.fetch = originalFetch;
+  stopGroup(vite);
+  stopGroup(backend);
+});
+
+beforeEach(async () => {
+  await resetBackend();
+  window.sessionStorage.clear();
+  window.localStorage.clear();
+  window.history.pushState({}, '', '/');
+  container = document.createElement('div');
+  document.body.replaceChildren(container);
+  root = createRoot(container);
+  await act(async () => { root.render(<App />); });
+  await waitFor(() => Boolean(document.querySelector('[data-testid="card-job-job-platform"]')));
+});
+
+describe('frontend journeys over the live API and Vite proxy', () => {
+  it('loads public jobs and company details, then shows an actionable invalid request', async () => {
+    expect(document.body.textContent).toContain('Platform Engineer');
+    await click(document.querySelector('[data-testid="link-job-job-platform"]')!);
+    await waitFor(() => Boolean(document.querySelector('[data-testid="text-job-title"]')));
+    expect(document.body.textContent).toContain('Platform Engineer');
+    await click(button('button-detail-save'));
+    await waitFor(() => Boolean(document.querySelector('[data-testid="link-sign-in"]')));
+    expect(document.body.textContent).toContain('Sign in');
+  });
+
+  it('authenticates a candidate, saves, applies, lists and withdraws a job', async () => {
+    await login('candidate@example.com', 'candidate-password');
+    await click(document.querySelector('[data-testid="link-job-job-platform"]')!);
+    await waitFor(() => Boolean(document.querySelector('[data-testid="button-detail-save"]')));
+    await click(button('button-detail-save'));
+    await waitFor(() => document.body.textContent?.includes('Saved') ?? false);
+    await click(button('button-open-application'));
+    await waitFor(() => Boolean(document.querySelector('[data-testid="button-submit-application"]')));
+    input('input-applicant-name', 'Candidate');
+    input('input-applicant-email', 'candidate@example.com');
+    input('input-cover-letter', 'A thoughtful application.');
+    const cv = document.querySelector<HTMLSelectElement>('[data-testid="select-cv"]');
+    if (cv) { cv.value = cv.options[0]?.value || ''; cv.dispatchEvent(new Event('change', { bubbles: true })); }
+    await submit(document.querySelector('[role="dialog"] form')!);
+    await waitFor(() => document.body.textContent?.includes('Your application is in') ?? false);
+    await click(document.querySelector('[data-testid="nav-applications"]')!);
+    await waitFor(() => Boolean(document.querySelector('[data-testid^="row-application-"]')));
+    const withdraw = document.querySelector<HTMLButtonElement>('[data-testid^="button-withdraw-"]')!;
+    window.confirm = () => true;
+    await click(withdraw);
+    await waitFor(() => document.body.textContent?.includes('Withdrawn') ?? false);
+  });
+
+  it('lets an employer review the candidate application and update status', async () => {
+    await login('candidate@example.com', 'candidate-password');
+    await click(document.querySelector('[data-testid="link-job-job-platform"]')!);
+    await waitFor(() => Boolean(document.querySelector('[data-testid="button-detail-save"]')));
+    await click(button('button-open-application'));
+    await waitFor(() => Boolean(document.querySelector('[data-testid="button-submit-application"]')));
+    input('input-applicant-name', 'Candidate');
+    input('input-applicant-email', 'candidate@example.com');
+    input('input-cover-letter', 'Please consider me.');
+    await submit(document.querySelector('[role="dialog"] form')!);
+    await waitFor(() => document.body.textContent?.includes('Your application is in') ?? false);
+    await login('recruiter@example.com', 'recruiter-password');
+    window.history.pushState({}, '', '/employer/jobs/job-platform/applicants');
+    await act(async () => { window.dispatchEvent(new PopStateEvent('popstate')); });
+    await waitFor(() => Boolean(document.querySelector('[data-testid^="row-applicant-"]')));
+    const status = document.querySelector<HTMLSelectElement>('[data-testid^="select-applicant-status-"]')!;
+    status.value = 'Under Review';
+    await act(async () => { status.dispatchEvent(new Event('change', { bubbles: true })); });
+    await waitFor(() => document.body.textContent?.includes('marked Under Review') ?? false);
+    expect(window.sessionStorage.getItem(ACCESS_TOKEN_KEY)).toBeTruthy();
+  }, 30_000);
+});
