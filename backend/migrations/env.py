@@ -1,7 +1,9 @@
 from logging.config import fileConfig
 import os
+from pathlib import Path
 
 from sqlalchemy import engine_from_config, event
+from sqlalchemy.engine import make_url
 from sqlalchemy import pool
 
 from alembic import context
@@ -69,6 +71,13 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
+    url = make_url(config.get_main_option("sqlalchemy.url"))
+    if url.drivername in {"sqlite", "sqlite+pysqlite"} and url.database not in {
+        None,
+        ":memory:",
+    }:
+        Path(url.database).expanduser().parent.mkdir(parents=True, exist_ok=True)
+
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",

@@ -78,19 +78,39 @@ def test_upgrade_is_idempotent_and_current_reports_the_head(tmp_path):
 
 
 def test_migration_environment_honors_database_url_override_and_default(monkeypatch, tmp_path):
-    override = f"sqlite:///{tmp_path / 'override.sqlite3'}"
+    override_path = tmp_path / "override-parent" / "override.sqlite3"
+    override = f"sqlite:///{override_path}"
     monkeypatch.setenv("DATABASE_URL", override)
     selected_url = get_database_url()
     assert selected_url == override
     config = alembic_config(selected_url)
     assert config.get_main_option("sqlalchemy.url") == override
     command.upgrade(config, "head")
-    assert (tmp_path / "override.sqlite3").exists()
+    assert override_path.is_file()
 
     monkeypatch.delenv("DATABASE_URL")
     default = get_database_url()
     assert default.startswith("sqlite:///")
     assert ".local-data" in default
+
+
+def test_default_database_upgrade_creates_missing_parent(monkeypatch, tmp_path):
+    import api.database
+
+    database_path = tmp_path / "default-parent" / "steadwork.sqlite3"
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setattr(
+        api.database,
+        "get_database_url",
+        lambda environ=None: f"sqlite:///{database_path}",
+    )
+    config = alembic_config("")
+    config.attributes.pop("database_url")
+    config.set_main_option("sqlalchemy.url", "")
+
+    command.upgrade(config, "head")
+
+    assert database_path.is_file()
 
 
 def test_unmigrated_database_fails_with_upgrade_instruction(tmp_path):
