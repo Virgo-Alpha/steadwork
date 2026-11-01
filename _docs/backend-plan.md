@@ -12,4 +12,10 @@ The frontend currently uses `MockJobBoardService`; `VITE_DATA_MODE=api` selects 
 
 Assumptions: session-cookie authentication with CSRF protection for unsafe methods; public job/company reads and guest internal applications are allowed; candidate-only profile/save/withdraw permissions; company membership controls job and applicant access. CV uploads should use a separate multipart upload endpoint returning a stored file identifier; this initial mock uses named sample files. Company team invitations, admin moderation, verification, email delivery, and production auth are future backend work. Server-side validation, duplicate protection, lifecycle/deadline enforcement, and audit logging remain authoritative.
 
-The attached scope selects Django REST Framework with PostgreSQL. The current workspace API scaffold is Express 5 with Drizzle, so the backend implementation should explicitly resolve whether Django will run as a separate service or whether that stack decision is changing. Keep this frontend service contract stable either way.
+The confirmed backend architecture is Django REST Framework, with PostgreSQL
+planned for the persistence milestone. The earlier workspace API scaffold
+referenced Express 5 with Drizzle; issue 5 resolves that discrepancy by
+standardizing the backend on Django/DRF rather than introducing a second
+service. The issue-5 skeleton therefore uses Django URL routing and DRF views,
+with a dependency-free dummy database configuration until the persistence
+milestone adds PostgreSQL. Keep this frontend service contract stable.
