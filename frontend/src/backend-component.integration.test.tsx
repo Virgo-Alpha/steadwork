@@ -139,6 +139,8 @@ describe('frontend journeys over the live API and Vite proxy', () => {
     await click(document.querySelector('[data-testid="link-job-job-platform"]')!);
     await waitFor(() => Boolean(document.querySelector('[data-testid="text-job-title"]')));
     expect(document.body.textContent).toContain('Platform Engineer');
+    await waitFor(() => document.body.textContent?.includes('Acme Technologies') ?? false);
+    expect(document.body.textContent).toContain('Acme Technologies');
     await click(button('button-detail-save'));
     await waitFor(() => Boolean(document.querySelector('[data-testid="link-sign-in"]')));
     expect(document.body.textContent).toContain('Sign in');
