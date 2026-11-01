@@ -49,8 +49,19 @@ const start = (command: string, args: string[], cwd: string, env: Record<string,
   return child;
 };
 
-const stopGroup = (child: ChildProcess | undefined) => {
-  if (child?.pid) process.kill(-child.pid, 'SIGTERM');
+const stopGroup = async (child: ChildProcess | undefined) => {
+  if (!child || child.exitCode !== null) return;
+  await new Promise<void>((resolve, reject) => {
+    const finish = () => { child.removeListener('error', reject); resolve(); };
+    child.once('exit', finish);
+    child.once('error', reject);
+    if (child.pid) {
+      try { process.kill(-child.pid, 'SIGTERM'); } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ESRCH') finish();
+        else reject(error);
+      }
+    } else finish();
+  });
 };
 
 const button = (testId: string) => document.querySelector<HTMLButtonElement>(`[data-testid="${testId}"]`)!;
@@ -78,6 +89,7 @@ const login = async (email: string, password: string) => {
     window.history.pushState({}, '', '/');
     await act(async () => { window.dispatchEvent(new PopStateEvent('popstate')); });
   }
+  await waitFor(() => Boolean(document.querySelector('[data-testid="link-job-job-platform"]')));
 };
 
 beforeAll(async () => {
@@ -105,8 +117,7 @@ beforeAll(async () => {
 });
 
 const resetBackend = async () => {
-  stopGroup(backend);
-  await sleep(100);
+  await stopGroup(backend);
   const backendDir = path.resolve(process.cwd(), '../backend');
   backend = start(path.join(backendDir, '.venv/bin/python'), ['manage.py', 'runserver', `127.0.0.1:${backendPort}`], backendDir, {
     STEADWORK_TEST_CLEAN_APPLICATIONS: '1',
@@ -114,14 +125,15 @@ const resetBackend = async () => {
   await waitFor(async () => { try { return (await originalFetch(`${backendUrl()}/api/health/`)).ok; } catch { return false; } });
 };
 
-afterAll(() => {
+afterAll(async () => {
   stopping = true;
   globalThis.fetch = originalFetch;
-  stopGroup(vite);
-  stopGroup(backend);
+  await act(async () => { root?.unmount(); });
+  await Promise.all([stopGroup(vite), stopGroup(backend)]);
 });
 
 beforeEach(async () => {
+  if (root) await act(async () => { root.unmount(); });
   await resetBackend();
   window.sessionStorage.clear();
   window.localStorage.clear();
