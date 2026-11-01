@@ -650,10 +650,11 @@ Goal: A new contributor can identify Steadwork’s intended users and current im
 - Do not include credentials, secrets, or personal/private resource links.
 
 ## 23. Define persistence requirements for deferred product features
-Status: in_progress
+Status: review
 Issue: https://github.com/Virgo-Alpha/steadwork/issues/23
 Worktree: `/tmp/steadwork-issue-23` (`issue-23-persistence-requirements`)
 Engineer: `/root/engineer_23`
+Reviewer worktree: `/tmp/steadwork-review-23` (`issue-23-review`), commits `9eabdc4`, `5e1e0e2`
 Owned files: `_docs/specs.md`, `_docs/backend-plan.md` only
 Goal: Specify persistence, lifecycle, authorization, and proposed API contracts for the confirmed deferred capabilities and create linked implementation issues only where the contract is sufficiently concrete.
 
