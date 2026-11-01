@@ -1,1 +1,0 @@
-- [Job-board decisions](job-board-decisions.md) — preserve the confirmed guest, account, application-status, and backend-stack rules.
