@@ -777,28 +777,33 @@ Goal: Record the product owner’s decisions for handling CV binaries in local d
 - Make privacy, access, deletion and backup behavior explicit before implementation.
 
 ## 27. Choose asynchronous email delivery and retry behavior
-Status: backlog
+Status: ready (product owner decisions requested)
 Issue: https://github.com/Virgo-Alpha/steadwork/issues/27
-Goal: Select the delivery and operational approach for the confirmed asynchronous email requirement.
+Goal: Record the product owner’s decisions on the delivery architecture and operational policy for asynchronous email before its persistence/API contract is implemented.
 
 ## Acceptance criteria
 
-- [ ] Select a provider/service boundary and background queue/worker approach with rationale.
-- [ ] Define the message triggers for guest confirmations, application updates, recruiter alerts, verification, and password reset.
-- [ ] Define retry/backoff, idempotency, terminal failure handling, operator visibility, and restart behavior.
-- [ ] Define persisted message data, access restrictions, retention/deletion, and secret handling.
-- [ ] Define a local/test path that does not send real email by default.
-- [ ] Record the decision in `_docs/specs.md` and `_docs/backend-plan.md`, linked from #23.
-- [ ] This issue changes no application code, API implementation, schema, runtime infrastructure, or secrets.
+- [ ] The product owner selects and records the delivery provider or service boundary, background queue/worker approach, rationale, and which service owns enqueueing, delivery, and credential management; do not assume Celery, Redis, or another vendor.
+- [ ] A message matrix defines the triggering domain event, recipient and purpose for guest application confirmation, candidate application status email, recruiter new-application alert, email verification, and password reset; it identifies messages that must not be sent for external-click events or failed/rolled-back applications.
+- [ ] The decision records transaction semantics for durable enqueue failure and provider failure after enqueue, explicitly confirming or revising the proposal in #23; provider delivery failure after durable enqueue does not undo an already committed domain operation.
+- [ ] The delivery contract defines queued/attempting/sent/terminal-failure transitions, selected retry limits and backoff, idempotency key scope, worker lease/restart recovery, and duplicate-delivery behavior when the provider cannot guarantee idempotency. Do not claim exactly-once delivery unless the selected service can prove it.
+- [ ] The policy defines terminal/dead-letter handling, who can inspect/retry/replay a message, what status/reason is visible to operators, and how credentials, message content, recipient addresses, and provider responses are redacted from logs.
+- [ ] The outbox data inventory identifies the minimum message type, recipient reference/address snapshot, template/context, idempotency key, state, attempt timestamps/count, and safe failure category required; it links retention, deletion, and audit duration to [#28](https://github.com/Virgo-Alpha/steadwork/issues/28) without inventing periods.
+- [ ] A local and automated-test path captures messages without sending real email by default and can simulate retryable and terminal provider failures without real recipient data or credentials.
+- [ ] Record the approved decisions and unresolved choices, with decision owner/date and rationale, in `_docs/specs.md` and `_docs/backend-plan.md`; link #27 from #23 and coordinate cross-feature retention/audit policy with #28.
+- [ ] This issue changes no application code, API implementation, database schema, dependency, runtime infrastructure, or secret; it records decisions only.
 
 ## Out of scope
 
-- Email sending, queue persistence, workers, templates, and provider credentials; follow-up work depends on this decision and #23.
+- Email sending, queue persistence, workers, templates, provider credentials, and implementation tests; follow-up implementation issues are created through #23 after the #27 and #28 decisions are recorded.
+- Cross-feature retention and audit periods, tracked by [#28](https://github.com/Virgo-Alpha/steadwork/issues/28).
 
 ## Constraints
 
 - Asynchronous delivery with retries is confirmed; Celery and Redis are options, not selected infrastructure.
+- Do not choose a provider or queue/worker on behalf of the product owner.
 - Do not commit API keys, credentials, or recipient data.
+- Keep post-enqueue provider delivery failure separate from the already committed user-facing domain operation.
 
 ## 28. Set retention and audit policy for deferred records
 Status: backlog
