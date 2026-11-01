@@ -101,6 +101,15 @@ def test_repository_crud_for_every_persisted_entity(tmp_path):
         repositories[SavedJobRecord].save(replacement)
         session.flush()
 
+        with pytest.raises(IntegrityError):
+            session.add(UserRecord(id="duplicate-email", email="updated@example.com", role="candidate", password_hash="hash"))
+            session.flush()
+        session.rollback()
+        with pytest.raises(IntegrityError):
+            session.add(SavedJobRecord(user_id="u", job_id="j"))
+            session.flush()
+        session.rollback()
+
         unattached = CompanyRecord(id="delete-me", name="Temporary")
         repositories[CompanyRecord].save(unattached)
         session.flush()
