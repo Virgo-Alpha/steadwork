@@ -19,13 +19,26 @@ function Notice({ text, close }: { text: string; close: () => void }) {
   if (!text) return null;
   return <div className="toast-note" role="status" data-testid="status-feedback" style={{ position: 'fixed', zIndex: 50, right: 20, bottom: 20, maxWidth: 360, display: 'flex', gap: 12, alignItems: 'center', background: 'hsl(var(--foreground))', color: 'hsl(var(--background))', padding: '13px 16px', borderRadius: 9, boxShadow: '0 14px 40px #18233330' }}>{text}<button data-testid="button-dismiss-feedback" onClick={close} aria-label="Dismiss"><X size={15}/></button></div>;
 }
+function InlineError({ text }: { text: string }) {
+  if (!text) return null;
+  return <div role="alert" data-testid="status-api-error" style={{ margin: '12px auto', maxWidth: 1120, padding: '12px 16px', color: 'hsl(var(--destructive))', background: 'hsl(var(--destructive) / .08)', borderRadius: 8 }}>{text}</div>;
+}
 function AppShell({ children }: { children: ReactNode }) {
   const [path, setLocation] = useLocation();
   const user = useLoad<User>(() => service.getCurrentUser(), [path]);
   const [toast, setToast] = useState('');
   const [role, setRole] = useState<'candidate' | 'company'>('candidate');
   useEffect(() => { user.data && setRole(user.data.role === 'company' ? 'company' : 'candidate'); }, [user.data]);
-  const updateRole = async (next: 'candidate' | 'company') => { const updated = await service.switchRole(next); user.setData(updated); setRole(next); setToast(`Demo switched to ${next === 'company' ? 'hiring team' : 'candidate'} view`); };
+  const updateRole = async (next: 'candidate' | 'company') => {
+    try {
+      const updated = await service.switchRole(next);
+      user.setData(updated);
+      setRole(next);
+      setToast(`Demo switched to ${next === 'company' ? 'hiring team' : 'candidate'} view`);
+    } catch (reason) {
+      setToast(reason instanceof Error ? reason.message : 'Unable to switch role.');
+    }
+  };
   const nav = [
     { href: '/', label: 'Find roles', icon: Search }, { href: '/saved', label: 'Saved', icon: Bookmark },
     { href: '/applications', label: 'Applications', icon: ClipboardList }, { href: '/profile', label: 'My profile', icon: CircleUserRound },
@@ -59,9 +72,9 @@ function AppShell({ children }: { children: ReactNode }) {
         <Link href="/login" className="nav-link" data-testid="mobile-nav-account" style={{ display: 'grid', justifyItems: 'center', fontSize: 10, gap: 3 }}><CircleUserRound size={17}/>Account</Link>
       </div>
     </header>
-    <main>{children}</main>
+    <main><InlineError text={user.error} />{children}</main>
     <footer style={{ borderTop: '1px solid hsl(var(--border))', marginTop: 80, padding: '24px 0', color: 'hsl(var(--muted-foreground))', fontSize: 12 }}>
-      <div className="main-wrap" style={{ display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}><span>steadwork — thoughtful work starts here.</span><button className="nav-link" data-testid="button-reset-demo" onClick={async () => { await service.resetDemo(); setToast('Demo data restored to its starting point'); setLocation('/'); }}>Reset demo data</button></div>
+      <div className="main-wrap" style={{ display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}><span>steadwork — thoughtful work starts here.</span><button className="nav-link" data-testid="button-reset-demo" onClick={async () => { try { await service.resetDemo(); setToast('Demo data restored to its starting point'); setLocation('/'); } catch (reason) { setToast(reason instanceof Error ? reason.message : 'Unable to reset demo data.'); } }}>Reset demo data</button></div>
     </footer>
     <Notice text={toast} close={() => setToast('')}/>
   </div>;
