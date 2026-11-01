@@ -1,0 +1,13 @@
+{
+  "name": "steadwork-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "./run.sh",
+    "test:playwright": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.55.1"
+  }
+}
