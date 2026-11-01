@@ -24,6 +24,12 @@ uv run pytest
 uv run python manage.py check
 ```
 
+Run the HTTP integration matrix with DRF's APIClient:
+
+```sh
+uv run pytest api/tests/test_api_integration.py
+```
+
 Resource routers, domain models, storage and authentication are separate
 modules. The in-memory seed is deterministic: companies `company-acme` and
 `company-orbit`, jobs `job-platform` and `job-design`, and users
