@@ -22,6 +22,23 @@ def authenticated(email, password):
     return client
 
 
+def test_authenticated_me_returns_current_user():
+    client = APIClient()
+    login = client.post(
+        "/api/auth/login/",
+        {"email": "candidate@example.com", "password": "candidate-password"},
+        format="json",
+    )
+    token = login.json()["access_token"]
+    response = client.get("/api/auth/me/", HTTP_AUTHORIZATION=f"Bearer {token}")
+    assert response.status_code == 200
+    assert response.json() == login.json()["user"]
+
+
+def test_me_requires_bearer_authentication():
+    assert APIClient().get("/api/auth/me/").status_code == 401
+
+
 def application_body(email="candidate@example.com", job_id="job-platform"):
     return {
         "jobId": job_id,

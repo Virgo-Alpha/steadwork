@@ -3,7 +3,7 @@ from django.urls import path
 from .routers import (
     admin_probe, candidate_applications, candidate_probe, candidate_profile,
     create_application, create_guest_application, get_company, get_job, health,
-    list_companies, list_jobs, login, recruiter_probe, saved_jobs,
+    list_companies, list_jobs, login, me, recruiter_probe, saved_jobs,
     unsave_job, withdraw_application,
     employer_dashboard, employer_jobs, employer_job, employer_job_status,
     employer_applications, employer_application_status, notifications, notification_read,
@@ -12,6 +12,7 @@ from .routers import (
 urlpatterns = [
     path("health/", health, name="health"),
     path("auth/login/", login, name="login"),
+    path("auth/me/", me, name="me"),
     path("jobs/", list_jobs, name="jobs"),
     path("jobs/<str:job_id>/", get_job, name="job"),
     path("companies/", list_companies, name="companies"),
