@@ -12,6 +12,7 @@ WSGI_APPLICATION = "steadwork.wsgi.application"
 INSTALLED_APPS = [
     "django.contrib.contenttypes",
     "rest_framework",
+    "api.apps.ApiConfig",
 ]
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
