@@ -32,8 +32,11 @@ def issue_token(user: User, lifetime: timedelta | None = None) -> str:
     _tokens.clear()
     _tokens.update(_tokens_copy)
     token = secrets.token_urlsafe(32)
+    expiry = lifetime if lifetime is not None else timedelta(
+        seconds=getattr(settings, "TOKEN_LIFETIME_SECONDS", 3600)
+    )
     _tokens[token] = TokenSession(
-        user.id, now + (lifetime or timedelta(seconds=getattr(settings, "TOKEN_LIFETIME_SECONDS", 3600)))
+        user.id, now + expiry
     )
     return token
 
