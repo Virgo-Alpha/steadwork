@@ -6,6 +6,7 @@ requires-python = ">=3.12"
 dependencies = [
     "Django>=5.2,<6.0",
     "djangorestframework>=3.16,<4.0",
+    "sqlalchemy>=2.0,<3.0",
 ]
 
 [dependency-groups]
@@ -15,7 +16,7 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-DJANGO_SETTINGS_MODULE = "steadwork.settings"
+DJANGO_SETTINGS_MODULE = "steadwork.test_settings"
 pythonpath = ["."]
 testpaths = ["api/tests"]
 

@@ -1,11 +1,15 @@
 """Deterministic, resettable in-memory storage boundary."""
 
 import os
+from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from datetime import timedelta
 from django.utils import timezone
 from .models import Application, Company, Job, Membership, Notification, User
 from django.contrib.auth.hashers import make_password
+
+
+_request_store: ContextVar[object | None] = ContextVar("steadwork_request_store", default=None)
 
 
 @dataclass
@@ -60,7 +64,22 @@ _store = _seed()
 
 
 def get_store() -> InMemoryStore:
-    return _store
+    active = _request_store.get()
+    if active is not None:
+        return active
+    from django.conf import settings
+
+    if settings.STORE_BACKEND == "inmemory":
+        return _store
+    raise RuntimeError("The SQLite store is available only inside a request-scoped database session.")
+
+
+def set_request_store(store: InMemoryStore) -> Token:
+    return _request_store.set(store)
+
+
+def clear_request_store(token: Token) -> None:
+    _request_store.reset(token)
 
 
 def reset_store() -> None:
@@ -68,8 +87,13 @@ def reset_store() -> None:
     _store = _seed()
     from .auth import revoke_all_tokens
 
+    from django.conf import settings
+    if settings.STORE_BACKEND != "inmemory":
+        raise RuntimeError("reset_store() is available only when STEADWORK_STORE=inmemory.")
+
     revoke_all_tokens()
 
 def application_status() -> str:
-    """Report the dependency-free store used by the bootstrap service."""
-    return "in-memory"
+    """Report which persistence backend serves the current request."""
+    from django.conf import settings
+    return "in-memory" if settings.STORE_BACKEND == "inmemory" else "sqlite"
