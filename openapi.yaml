@@ -1,109 +1,70 @@
-openapi: 3.0.3
+openapi: 3.1.0
 info:
-  title: Steadwork Backend API
+  title: Steadwork Frontend API Contract
   version: 1.0.0
-  description: >-
-    Contract for the API consumed by the frontend HTTP job board service.
-    Paths are mounted below /api. Registration, password reset, recommendations,
-    email verification, role switching, and demo reset are not exposed by this
-    backend client and are not part of this contract.
+  description: |
+    Contract for the HTTP endpoints called by `frontend/src/services/http-job-board-service.ts`.
+    Paths are relative to `/api`. Authentication uses the bearer access token returned
+    by `POST /auth/login/`. The frontend does not call endpoints for methods it marks
+    unsupported (registration, recommendations, email verification, password reset,
+    role switching, and demo reset); those are intentionally absent here.
 servers:
   - url: /api
-    description: API prefix (the frontend prepends /api to every request)
+    description: Same-origin API base used by the frontend
 tags:
-  - name: Health
+  - name: Public
   - name: Authentication
-  - name: Jobs
-  - name: Companies
   - name: Candidate
   - name: Applications
   - name: Employer
   - name: Notifications
 paths:
-  /health/:
-    get:
-      tags: [Health]
-      summary: Backend liveness and store status
-      security: []
-      responses:
-        '200':
-          description: Service is responding
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [status, service, store, authenticated]
-                properties:
-                  status: { type: string, example: ok }
-                  service: { type: string, example: steadwork-backend }
-                  store: { type: string, example: sqlite }
-                  authenticated: { type: boolean }
-  /auth/login/:
-    post:
-      tags: [Authentication]
-      summary: Sign in and receive a bearer token
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/LoginInput' }
-      responses:
-        '200':
-          description: Authenticated session
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [access_token, token_type, user]
-                properties:
-                  access_token: { type: string }
-                  token_type: { type: string, enum: [Bearer] }
-                  user: { $ref: '#/components/schemas/User' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-  /auth/me/:
-    get:
-      tags: [Authentication]
-      summary: Get the current user
-      security: [{ bearerAuth: [] }]
-      responses:
-        '200':
-          description: Current user
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/User' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
   /jobs/:
     get:
-      tags: [Jobs]
-      summary: List published jobs
-      security: []
+      tags: [Public]
+      operationId: listJobs
+      summary: Search published jobs
       parameters:
-        - { name: keyword, in: query, schema: { type: string } }
-        - { name: location, in: query, schema: { type: string } }
-        - { name: jobType, in: query, schema: { type: string, enum: [Full-time, Part-time, Contract, Internship] } }
-        - { name: remotePolicy, in: query, schema: { type: string, enum: [Remote, Hybrid, On-site] } }
-        - { name: experienceLevel, in: query, schema: { type: string, enum: [Entry, Mid, Senior, Lead] } }
-        - { name: salaryMin, in: query, schema: { type: number, minimum: 0 } }
+        - { $ref: '#/components/parameters/keyword' }
+        - { $ref: '#/components/parameters/location' }
+        - name: jobType
+          in: query
+          schema: { $ref: '#/components/schemas/JobType' }
+        - name: remotePolicy
+          in: query
+          schema: { $ref: '#/components/schemas/RemotePolicy' }
+        - name: experienceLevel
+          in: query
+          schema: { $ref: '#/components/schemas/ExperienceLevel' }
+        - name: salaryMin
+          in: query
+          schema: { type: number, minimum: 0 }
         - name: skills
           in: query
-          description: Comma-separated list; all supplied skills must match.
+          description: Comma-separated skill names; all supplied skills must match.
           schema: { type: string }
-        - { name: companyId, in: query, schema: { type: string } }
-        - { name: postedWithin, in: query, description: Maximum age in days, schema: { type: number, minimum: 0 } }
-        - { name: sort, in: query, schema: { type: string, enum: [recent, salary, relevance], default: recent } }
+        - name: companyId
+          in: query
+          schema: { type: string }
+        - name: postedWithin
+          in: query
+          description: Maximum age of a posting in days.
+          schema: { type: number, minimum: 0 }
+        - name: sort
+          in: query
+          schema: { type: string, enum: [recent, salary, relevance] }
       responses:
         '200':
-          description: Matching jobs
+          description: Matching published jobs (JSON array).
           content:
             application/json:
               schema: { type: array, items: { $ref: '#/components/schemas/Job' } }
         '400': { $ref: '#/components/responses/BadRequest' }
   /jobs/{jobId}/:
     get:
-      tags: [Jobs]
+      tags: [Public]
+      operationId: getJob
       summary: Get a published job
-      security: []
       parameters:
         - { $ref: '#/components/parameters/jobId' }
       responses:
@@ -113,25 +74,29 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Job' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '400': { $ref: '#/components/responses/BadRequest' }
   /companies/:
     get:
-      tags: [Companies]
+      tags: [Public]
+      operationId: listCompanies
       summary: List companies
-      security: []
       responses:
         '200':
-          description: Companies
+          description: Companies (JSON array)
           content:
             application/json:
               schema: { type: array, items: { $ref: '#/components/schemas/Company' } }
         '400': { $ref: '#/components/responses/BadRequest' }
   /companies/{companyId}/:
     get:
-      tags: [Companies]
+      tags: [Public]
+      operationId: getCompany
       summary: Get a company
-      security: []
       parameters:
-        - { name: companyId, in: path, required: true, schema: { type: string } }
+        - name: companyId
+          in: path
+          required: true
+          schema: { type: string }
       responses:
         '200':
           description: Company
@@ -139,54 +104,43 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Company' }
         '404': { $ref: '#/components/responses/NotFound' }
-  /saved-jobs/:
-    get:
-      tags: [Candidate]
-      summary: List the candidate's saved jobs
-      security: [{ bearerAuth: [] }]
-      responses:
-        '200':
-          description: Saved jobs
-          content:
-            application/json:
-              schema: { type: array, items: { $ref: '#/components/schemas/Job' } }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /auth/login/:
     post:
-      tags: [Candidate]
-      summary: Save a job
-      security: [{ bearerAuth: [] }]
+      tags: [Authentication]
+      operationId: login
+      summary: Sign in and obtain a bearer token
+      security: []
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required: [jobId]
-              properties:
-                jobId: { type: string }
+            schema: { $ref: '#/components/schemas/LoginInput' }
       responses:
-        '204': { description: Job saved; response body is empty }
-        '400': { $ref: '#/components/responses/BadRequest' }
+        '200':
+          description: Access token and signed-in user
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginResponse' }
         '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/NotFound' }
-  /saved-jobs/{jobId}/:
-    delete:
-      tags: [Candidate]
-      summary: Remove a saved job
+  /auth/me/:
+    get:
+      tags: [Authentication]
+      operationId: getCurrentUser
+      summary: Get the authenticated user
       security: [{ bearerAuth: [] }]
-      parameters:
-        - { $ref: '#/components/parameters/jobId' }
       responses:
-        '204': { description: Job removed; response body is empty }
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
         '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/NotFound' }
   /candidate/profile/:
     get:
       tags: [Candidate]
-      summary: Get the candidate profile
+      operationId: getCandidateProfile
+      summary: Get the current candidate profile
       security: [{ bearerAuth: [] }]
       responses:
         '200':
@@ -198,13 +152,14 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
     patch:
       tags: [Candidate]
-      summary: Partially update the candidate profile
+      operationId: updateCandidateProfile
+      summary: Partially update the current candidate profile
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/CandidateProfilePatch' }
+            schema: { $ref: '#/components/schemas/CandidateProfileUpdate' }
       responses:
         '200':
           description: Updated candidate profile
@@ -217,20 +172,69 @@ paths:
   /candidate/applications/:
     get:
       tags: [Candidate, Applications]
-      summary: List the current candidate's applications
+      operationId: listCandidateApplications
+      summary: List applications belonging to the current candidate
       security: [{ bearerAuth: [] }]
       responses:
         '200':
-          description: Applications
+          description: Applications (JSON array)
           content:
             application/json:
               schema: { type: array, items: { $ref: '#/components/schemas/Application' } }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+  /saved-jobs/:
+    get:
+      tags: [Candidate]
+      operationId: listSavedJobs
+      summary: List jobs saved by the current candidate
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Saved jobs (JSON array)
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Job' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Candidate]
+      operationId: saveJob
+      summary: Save a job
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [jobId]
+              properties:
+                jobId: { type: string }
+      responses:
+        '204': { description: Job saved; no response body. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /saved-jobs/{jobId}/:
+    delete:
+      tags: [Candidate]
+      operationId: unsaveJob
+      summary: Remove a saved job
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/jobId' }
+      responses:
+        '204': { description: Job removed; no response body. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /applications/:
     post:
       tags: [Applications]
-      summary: Apply as the authenticated candidate
+      operationId: submitApplication
+      summary: Submit an application as the authenticated candidate
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -251,7 +255,8 @@ paths:
   /applications/guest/:
     post:
       tags: [Applications]
-      summary: Submit a guest application
+      operationId: submitGuestApplication
+      summary: Submit an application without signing in
       security: []
       requestBody:
         required: true
@@ -269,14 +274,18 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
   /applications/{applicationId}/withdraw/:
     post:
-      tags: [Applications]
-      summary: Withdraw an application belonging to the candidate
+      tags: [Candidate, Applications]
+      operationId: withdrawApplication
+      summary: Withdraw an application owned by the current candidate
       security: [{ bearerAuth: [] }]
       parameters:
-        - { name: applicationId, in: path, required: true, schema: { type: string } }
+        - name: applicationId
+          in: path
+          required: true
+          schema: { type: string }
       responses:
         '200':
-          description: Withdrawn application
+          description: Updated application
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Application' }
@@ -287,11 +296,12 @@ paths:
   /employer/dashboard/:
     get:
       tags: [Employer]
-      summary: Get the employer dashboard summary
+      operationId: getEmployerDashboard
+      summary: Get dashboard counts and recent company applications
       security: [{ bearerAuth: [] }]
       responses:
         '200':
-          description: Dashboard summary
+          description: Employer dashboard
           content:
             application/json:
               schema: { $ref: '#/components/schemas/EmployerDashboard' }
@@ -299,20 +309,22 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
   /employer/jobs/:
     get:
-      tags: [Employer, Jobs]
-      summary: List jobs owned by the employer's company
+      tags: [Employer]
+      operationId: listCompanyJobs
+      summary: List jobs for the authenticated employer's company
       security: [{ bearerAuth: [] }]
       responses:
         '200':
-          description: Company jobs
+          description: Company jobs (JSON array)
           content:
             application/json:
               schema: { type: array, items: { $ref: '#/components/schemas/Job' } }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
     post:
-      tags: [Employer, Jobs]
-      summary: Create a company job
+      tags: [Employer]
+      operationId: createJob
+      summary: Create a job for the authenticated employer's company
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -330,7 +342,8 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
   /employer/jobs/{jobId}/:
     patch:
-      tags: [Employer, Jobs]
+      tags: [Employer]
+      operationId: updateJob
       summary: Partially update a company job
       security: [{ bearerAuth: [] }]
       parameters:
@@ -352,7 +365,8 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
   /employer/jobs/{jobId}/status/:
     post:
-      tags: [Employer, Jobs]
+      tags: [Employer]
+      operationId: setJobStatus
       summary: Change a job's status
       security: [{ bearerAuth: [] }]
       parameters:
@@ -365,7 +379,7 @@ paths:
               type: object
               required: [status]
               properties:
-                status: { type: string, enum: [Draft, Published, Closed, Expired] }
+                status: { $ref: '#/components/schemas/JobStatus' }
       responses:
         '200':
           description: Updated job
@@ -379,13 +393,14 @@ paths:
   /employer/jobs/{jobId}/applications/:
     get:
       tags: [Employer, Applications]
-      summary: List applicants to a company job
+      operationId: listApplicants
+      summary: List applications for a company job
       security: [{ bearerAuth: [] }]
       parameters:
         - { $ref: '#/components/parameters/jobId' }
       responses:
         '200':
-          description: Applications for the job
+          description: Applications (JSON array)
           content:
             application/json:
               schema: { type: array, items: { $ref: '#/components/schemas/Application' } }
@@ -395,10 +410,14 @@ paths:
   /employer/applications/{applicationId}/status/:
     post:
       tags: [Employer, Applications]
-      summary: Change an applicant's status
+      operationId: updateApplicationStatus
+      summary: Advance an application to an allowed status
       security: [{ bearerAuth: [] }]
       parameters:
-        - { name: applicationId, in: path, required: true, schema: { type: string } }
+        - name: applicationId
+          in: path
+          required: true
+          schema: { type: string }
       requestBody:
         required: true
         content:
@@ -407,7 +426,7 @@ paths:
               type: object
               required: [status]
               properties:
-                status: { type: string, enum: [Applied, Under Review, Shortlisted, Rejected, Hired] }
+                status: { $ref: '#/components/schemas/ApplicationStatus' }
       responses:
         '200':
           description: Updated application
@@ -421,11 +440,12 @@ paths:
   /notifications/:
     get:
       tags: [Notifications]
+      operationId: listNotifications
       summary: List notifications for the current user
       security: [{ bearerAuth: [] }]
       responses:
         '200':
-          description: Notifications
+          description: Notifications (JSON array)
           content:
             application/json:
               schema: { type: array, items: { $ref: '#/components/schemas/Notification' } }
@@ -433,12 +453,16 @@ paths:
   /notifications/{notificationId}/read/:
     post:
       tags: [Notifications]
+      operationId: markNotificationRead
       summary: Mark a notification as read
       security: [{ bearerAuth: [] }]
       parameters:
-        - { name: notificationId, in: path, required: true, schema: { type: string } }
+        - name: notificationId
+          in: path
+          required: true
+          schema: { type: string }
       responses:
-        '204': { description: Notification marked read; response body is empty }
+        '204': { description: Notification marked read; no response body. }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
 components:
@@ -446,36 +470,44 @@ components:
     bearerAuth:
       type: http
       scheme: bearer
-      bearerFormat: token
+      bearerFormat: Opaque access token
   parameters:
     jobId:
       name: jobId
       in: path
       required: true
       schema: { type: string }
+    keyword:
+      name: keyword
+      in: query
+      schema: { type: string }
+    location:
+      name: location
+      in: query
+      schema: { type: string }
   responses:
     BadRequest:
-      description: Invalid request body or query parameter
+      description: Invalid request; may include field or validation detail.
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     Unauthorized:
-      description: Missing, invalid, or expired authentication
+      description: Missing, invalid, or expired credentials (or invalid login).
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     Forbidden:
-      description: Authenticated user lacks the required role or ownership
+      description: Authenticated user lacks the required role, membership, or ownership.
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     NotFound:
-      description: Resource not found
+      description: Requested resource was not found.
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     Conflict:
-      description: Request conflicts with an existing application
+      description: Request conflicts with existing application data.
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
@@ -485,64 +517,53 @@ components:
       required: [detail]
       properties:
         detail: { type: string }
-    User:
-      type: object
-      required: [id, email, role]
-      properties:
-        id: { type: string }
-        email: { type: string, format: email }
-        role: { type: string, enum: [candidate, company, admin] }
     LoginInput:
       type: object
       required: [email, password]
       properties:
+        email: { type: string }
+        password: { type: string }
+    LoginResponse:
+      type: object
+      required: [access_token, token_type, user]
+      properties:
+        access_token: { type: string }
+        token_type: { type: string, const: Bearer }
+        user: { $ref: '#/components/schemas/User' }
+    User:
+      type: object
+      required: [id, name, email, role]
+      properties:
+        id: { type: string }
+        name: { type: string }
         email: { type: string, format: email }
-        password: { type: string, format: password }
+        role: { type: string, enum: [candidate, company, admin] }
+        emailVerified: { type: boolean }
     Job:
       type: object
-      required: [id, companyId, title, description, location, salaryMin, salaryMax, currency, remotePolicy, jobType, experienceLevel, skills, responsibilities, qualifications, benefits, applicationMethod, status, postedAt, deadline, applicationCount]
+      required: [id, companyId, title, description, location, remotePolicy, jobType, salaryMin, salaryMax, currency, experienceLevel, skills, responsibilities, qualifications, benefits, applicationMethod, status, postedAt, deadline, applicationCount]
       properties:
         id: { type: string }
         companyId: { type: string }
         title: { type: string }
         description: { type: string }
         location: { type: string }
+        remotePolicy: { $ref: '#/components/schemas/RemotePolicy' }
+        jobType: { $ref: '#/components/schemas/JobType' }
         salaryMin: { type: number }
         salaryMax: { type: number }
         currency: { type: string }
-        remotePolicy: { type: string, enum: [Remote, Hybrid, On-site] }
-        jobType: { type: string, enum: [Full-time, Part-time, Contract, Internship] }
-        experienceLevel: { type: string, enum: [Entry, Mid, Senior, Lead] }
+        experienceLevel: { $ref: '#/components/schemas/ExperienceLevel' }
         skills: { type: array, items: { type: string } }
         responsibilities: { type: array, items: { type: string } }
         qualifications: { type: array, items: { type: string } }
         benefits: { type: array, items: { type: string } }
         applicationMethod: { type: string, enum: [Internal, External] }
-        externalApplyUrl: { type: string, format: uri }
-        status: { type: string, enum: [Draft, Published, Closed, Expired] }
+        externalApplyUrl: { type: string }
+        status: { $ref: '#/components/schemas/JobStatus' }
         postedAt: { type: string, format: date-time }
         deadline: { type: string, format: date-time }
         applicationCount: { type: integer }
-    JobInput:
-      type: object
-      description: All fields are optional for the current create and patch handlers.
-      properties:
-        title: { type: string }
-        description: { type: string }
-        location: { type: string }
-        salaryMin: { type: number }
-        salaryMax: { type: number }
-        currency: { type: string }
-        remotePolicy: { type: string, enum: [Remote, Hybrid, On-site] }
-        jobType: { type: string, enum: [Full-time, Part-time, Contract, Internship] }
-        experienceLevel: { type: string, enum: [Entry, Mid, Senior, Lead] }
-        skills: { type: array, items: { type: string } }
-        responsibilities: { type: array, items: { type: string } }
-        qualifications: { type: array, items: { type: string } }
-        benefits: { type: array, items: { type: string } }
-        applicationMethod: { type: string, enum: [Internal, External] }
-        externalApplyUrl: { type: string, format: uri }
-        deadline: { type: string, format: date-time }
     Company:
       type: object
       required: [id, name, description, website, logo, accent]
@@ -566,10 +587,11 @@ components:
         preferences: { type: string }
         cvFiles: { type: array, items: { type: string } }
         defaultCvId: { type: string }
-    CandidateProfilePatch:
+    CandidateProfileUpdate:
       type: object
+      additionalProperties: false
       properties:
-        userId: { type: string }
+        userId: { type: string, description: Must match the authenticated user's ID. }
         headline: { type: string }
         location: { type: string }
         skills: { type: array, items: { type: string } }
@@ -585,7 +607,7 @@ components:
         jobId: { type: string }
         candidateName: { type: string }
         candidateEmail: { type: string, format: email }
-        cvName: { type: string }
+        cvName: { type: string, description: CV name/reference; this endpoint does not upload a file. }
         coverLetter: { type: string }
     Application:
       type: object
@@ -598,7 +620,7 @@ components:
         candidateEmail: { type: string, format: email }
         cvName: { type: string }
         coverLetter: { type: string }
-        status: { type: string, enum: [Applied, Under Review, Shortlisted, Rejected, Hired, Withdrawn, External click] }
+        status: { $ref: '#/components/schemas/ApplicationStatus' }
         createdAt: { type: string, format: date-time }
     EmployerDashboard:
       type: object
@@ -618,3 +640,38 @@ components:
         body: { type: string }
         readAt: { type: string, format: date-time }
         createdAt: { type: string, format: date-time }
+    JobInput:
+      type: object
+      additionalProperties: false
+      properties:
+        title: { type: string }
+        description: { type: string }
+        location: { type: string }
+        salaryMin: { type: number }
+        salaryMax: { type: number }
+        currency: { type: string }
+        remotePolicy: { $ref: '#/components/schemas/RemotePolicy' }
+        jobType: { $ref: '#/components/schemas/JobType' }
+        experienceLevel: { $ref: '#/components/schemas/ExperienceLevel' }
+        skills: { type: array, items: { type: string } }
+        responsibilities: { type: array, items: { type: string } }
+        qualifications: { type: array, items: { type: string } }
+        benefits: { type: array, items: { type: string } }
+        applicationMethod: { type: string, enum: [Internal, External] }
+        externalApplyUrl: { type: string }
+        deadline: { type: string, format: date-time }
+    JobStatus:
+      type: string
+      enum: [Draft, Published, Closed, Expired]
+    ApplicationStatus:
+      type: string
+      enum: [Applied, Under Review, Shortlisted, Rejected, Hired, Withdrawn, External click]
+    JobType:
+      type: string
+      enum: [Full-time, Part-time, Contract, Internship]
+    RemotePolicy:
+      type: string
+      enum: [Remote, Hybrid, On-site]
+    ExperienceLevel:
+      type: string
+      enum: [Entry, Mid, Senior, Lead]
