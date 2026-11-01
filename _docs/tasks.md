@@ -533,29 +533,43 @@ Description: Add Playwright browser tests in the repository-root `e2e/` director
 - Keep E2E test dependencies and configuration inside repository-root `e2e/`; the later unified-test task may invoke this harness.
 
 ## 20. Create one command for all unit and integration tests
-Goal: A single documented command runs all checks, with `make e2e` dedicated to Compose-backed Playwright tests.
-Description: Add project-level Make targets that run frontend unit tests, backend unit tests, backend API integration tests, frontend/backend integration tests and the root `e2e/` suite. `make e2e` must start or use `docker-compose.yaml`, run Playwright, and clean up; the unified command must invoke it after the prerequisite checks.
+Status: merged (review approved; QA PASS; post-merge regression passed)
+Issue: https://github.com/Virgo-Alpha/steadwork/issues/20
+Worktree: `/tmp/steadwork-issue-20` (`issue-20-unified-tests`)
+Engineer: `/root/engineer_20`
+Owned files: root Makefile and test-focused documentation/commands, preserving existing E2E harness and suite files
+Commit: `1412758` (`Add unified test commands`)
+Review worktree: `/tmp/steadwork-review-20` (`review-20-unified-tests`; approved)
+QA worktree: `/tmp/steadwork-qa-20` (`qa-20-unified-tests`; PASS)
+Merge commit: `2310ec5` (`Merge issue #20 unified test commands`)
+Worktree: `/tmp/steadwork-issue-20` (`issue-20-unified-tests`)
+Engineer: `/root/engineer_20`
+Owned files: root Makefile and test-focused documentation/commands, preserving existing E2E harness and suite files
+Goal: From the repository root, contributors can run the frontend, backend, frontend/backend integration, and Compose-backed browser test suites in a predictable order, or run the non-Compose checks in a fast mode.
 
 ## Acceptance criteria
 
-- [ ] One documented command runs frontend unit, backend unit, backend API integration, frontend/backend integration and full Playwright E2E tests.
-- [ ] `make e2e` runs the root `e2e/` Playwright suite against `docker-compose.yaml`.
-- [ ] The command runs prerequisite setup in a deterministic order.
-- [ ] Any failed suite returns a non-zero exit code and identifies the failing stage.
-- [ ] The command documents required environment variables, Docker/Compose services and cleanup.
-- [ ] The full command runs `make e2e` by default, while an explicit fast mode omits Compose E2E tests.
+- [x] `make test` runs the existing frontend Vitest suite, the existing backend pytest suite, and the root `e2e/` Playwright suite in that order; the frontend and backend suite commands include their existing unit and integration coverage.
+- [x] Each stage prints a clear label, stops subsequent stages on failure, and returns a non-zero exit status identifying the failing stage.
+- [x] `make test-fast` runs the frontend and backend suites with the same order and failure behavior, and does not start Docker Compose or run Playwright.
+- [x] `make e2e` runs the existing isolated Compose-backed Playwright harness from `e2e/run.sh`; it does not duplicate E2E orchestration or query the database.
+- [x] Test dependency setup is available through documented Make targets: frontend/backend dependencies use the existing npm and uv workflows, and E2E setup installs its locked Playwright dependency and required browser.
+- [x] The test instructions document the root commands, required E2E demo-account environment variables, Docker/Compose requirement, and the harness's project/volume cleanup behavior.
+- [x] Full `make test` includes `make e2e` by default; `make test-fast` is the explicit opt-out from Compose-backed E2E.
 
 ## Out of scope
 
-- Adding new test cases, covered by #10, #13, #15 and #19.
-- CI workflow scheduling and permissions, covered by #21.
+- Adding or changing test cases, covered by [#19](https://github.com/Virgo-Alpha/steadwork/issues/19) and the existing frontend/backend suites.
+- GitHub Actions scheduling, caching and workflow policy, covered by [#21](https://github.com/Virgo-Alpha/steadwork/issues/21).
+- The complete project contributor guide and README rewrite, covered by [#22](https://github.com/Virgo-Alpha/steadwork/issues/22).
 
 ## Constraints
 
-- Reuse existing test runners and Makefile/Compose targets.
-- Do not duplicate test logic in shell scripts.
-- Keep local and CI invocation names consistent.
-- Keep the E2E test command independent from direct database access.
+- Reuse the existing frontend npm, backend uv/pytest, and `e2e/` Playwright runner commands.
+- Keep the existing `make dev`, `make install`, and setup behavior usable.
+- Keep the full test stages deterministic and sequential; fail fast with a readable stage name.
+- Do not duplicate Playwright Compose startup or cleanup logic already implemented in `e2e/run.sh`.
+- Keep test documentation focused on test invocation; leave the full contributor README work for #22.
 
 ## 21. Set up continuous integration checks
 Goal: GitHub Actions automatically runs parallel checks, Compose-backed integration/E2E tests, and a documented future deployment path.
