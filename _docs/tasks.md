@@ -650,29 +650,37 @@ Goal: A new contributor can identify Steadwork’s intended users and current im
 - Do not include credentials, secrets, or personal/private resource links.
 
 ## 23. Define persistence requirements for deferred product features
-Status: backlog
+Status: ready
 Issue: https://github.com/Virgo-Alpha/steadwork/issues/23
-Goal: Define persisted data, relationships, lifecycle rules, and API contracts for confirmed product capabilities outside the current API.
-Description: Inventory deferred team management, CV metadata/lifecycle, external apply tracking, platform moderation, and email delivery requirements. Resolve or explicitly track decisions and split approved persistence work into implementation issues without changing the current schema in this task.
+Goal: Specify persistence, lifecycle, authorization, and proposed API contracts for the confirmed deferred capabilities and create linked implementation issues only where the contract is sufficiently concrete.
 
 ## Acceptance criteria
 
-- [ ] The inventory covers team invitations/member administration, CV metadata/lifecycle, external application click tracking, platform moderation/suspension, and asynchronous email delivery where each remains in scope.
-- [ ] For each selected capability, requirements identify records/fields, relationships/deletion/retention, state transitions, authorization, and API operations.
-- [ ] Unresolved choices such as CV binary storage and email delivery/retry infrastructure are documented or assigned decision issues.
-- [ ] Approved capabilities needing tables are split into implementation issues with acceptance criteria and dependencies; this task adds no unsupported tables.
-- [ ] Product/backend specifications link to the decisions and implementation issues.
+- [ ] The requirements distinguish confirmed product scope from unresolved infrastructure and data-policy decisions. Confirmed scope includes company invitations/member administration, multiple CVs and per-application CV selection, external-apply click tracking without claiming submission completion, basic platform administration including suspension/removal, and asynchronous email with retries.
+- [ ] For team management, define invitation and membership records/fields; company/user relationships; pending, accepted, revoked, and expired lifecycle behavior; admin/recruiter permissions; and create/list/resend/revoke/remove API operations. Specify that removed members lose company access.
+- [ ] For CVs, define candidate-owned CV metadata and relationships to the candidate and applications, multiple/default/selected CV behavior, metadata lifecycle and APIs. Keep binary storage, access/download mechanics, validation limits, and retention tied to decision issue #26.
+- [ ] For external applications, define the click event record, job and optional registered-candidate relationship, event creation/redirect API operation, guest behavior, duplicate/retry behavior, authorization, and explicitly state that a click does not prove application submission. Keep retention tied to #28.
+- [ ] For moderation, define account suspension and job-removal records/state, actor/target relationships, affected-user access behavior, authorization, available admin operations, and required audit fields. Keep retention/audit policy tied to #28.
+- [ ] For asynchronous email, define persisted message/outbox data, triggering domain events, recipient relationship, queued/attempting/sent/failed transitions, idempotency and API behavior on enqueue failure. Keep provider, queue/worker choice, retry/backoff and operations policy tied to #27.
+- [ ] For every record, specify logical fields, relationships, deletion or retention behavior (or explicitly link unresolved policy to #26–#28), transitions, authorization, and the API operations that create/update it. Do not invent a retention duration.
+- [ ] For each capability whose contract is implementable after applying decisions #26–#28, create a separate linked implementation issue. Each issue cites the approved specification section, schema/migration and API scope, authorization/lifecycle cases, tests, and dependencies; do not create an implementation ticket whose contract still depends on an unresolved decision.
+- [ ] Update `_docs/specs.md` and `_docs/backend-plan.md` with the requirements, current-schema boundary, unresolved decisions, and links to all decision and implementation issues.
+- [ ] The issue changes no application code, API implementation, database schema, migrations, dependencies, or runtime infrastructure.
 
 ## Out of scope
 
+- Choosing CV file storage, access, and retention; tracked by [#26](https://github.com/Virgo-Alpha/steadwork/issues/26).
+- Choosing email delivery, queue/worker, retry, and operations behavior; tracked by [#27](https://github.com/Virgo-Alpha/steadwork/issues/27).
+- Setting retention and audit policy across deferred records; tracked by [#28](https://github.com/Virgo-Alpha/steadwork/issues/28).
 - Implementing deferred APIs, persistence models, email delivery, CV storage, or moderation behavior.
 - PostgreSQL and Compose, covered by [#17](https://github.com/Virgo-Alpha/steadwork/issues/17).
 
 ## Constraints
 
-- Use `_docs/specs.md` and `_docs/backend-plan.md` as source requirements.
-- Keep the current API and schema stable until feature contracts are agreed.
-- Do not choose file or email storage infrastructure without a product decision.
+- Use `_docs/specs.md`, `_docs/backend-plan.md`, and confirmed decisions in `_docs/job_board_project_scope.md` as source requirements.
+- Keep the currently implemented API and schema stable; treat the ORM and Alembic migrations as the authoritative current persistence boundary.
+- Do not choose infrastructure for file or email storage or invent retention periods without an explicit product decision.
+- Do not imply currently incomplete APIs, CV binary storage, email delivery, invitations, external click tracking, or moderation are implemented.
 
 ## 24. Define requirements for collaborative interview sessions and canvas
 Status: backlog
@@ -726,3 +734,75 @@ Goal: Decide and implement a production deployment and release path for Steadwor
 - Keep production credentials out of the repository and workflow logs.
 - Do not deploy from untrusted pull-request code.
 - Add observability and on-call automation only through separately groomed work.
+
+## 26. Decide CV file storage, access, and retention
+Status: backlog
+Issue: https://github.com/Virgo-Alpha/steadwork/issues/26
+Goal: Choose the product and technical policy for storing and serving candidate CV files before defining their persistence/API implementation.
+
+## Acceptance criteria
+
+- [ ] Select storage for local development and production, including separation of files and credentials.
+- [ ] Define accepted types, size limits, upload validation, and malware scanning policy.
+- [ ] Define candidate and recruiter permissions for upload, list, download, select, and delete.
+- [ ] Define authenticated download behavior and failed-upload cleanup.
+- [ ] Define deletion/retention for candidate deletion, application retention, and backup expiry.
+- [ ] Record the policy in `_docs/specs.md` and `_docs/backend-plan.md`, linked from #23.
+- [ ] This issue changes no application code, API implementation, schema, or runtime infrastructure.
+
+## Out of scope
+
+- CV upload, file storage, metadata persistence, and download implementation; follow-up work depends on this decision and #23.
+
+## Constraints
+
+- Do not commit CV files, credentials, or personal data.
+- Preserve multiple CVs and per-application CV selection.
+- Make privacy, access, deletion, and backup behavior explicit before implementation.
+
+## 27. Choose asynchronous email delivery and retry behavior
+Status: backlog
+Issue: https://github.com/Virgo-Alpha/steadwork/issues/27
+Goal: Select the delivery and operational approach for the confirmed asynchronous email requirement.
+
+## Acceptance criteria
+
+- [ ] Select a provider/service boundary and background queue/worker approach with rationale.
+- [ ] Define the message triggers for guest confirmations, application updates, recruiter alerts, verification, and password reset.
+- [ ] Define retry/backoff, idempotency, terminal failure handling, operator visibility, and restart behavior.
+- [ ] Define persisted message data, access restrictions, retention/deletion, and secret handling.
+- [ ] Define a local/test path that does not send real email by default.
+- [ ] Record the decision in `_docs/specs.md` and `_docs/backend-plan.md`, linked from #23.
+- [ ] This issue changes no application code, API implementation, schema, runtime infrastructure, or secrets.
+
+## Out of scope
+
+- Email sending, queue persistence, workers, templates, and provider credentials; follow-up work depends on this decision and #23.
+
+## Constraints
+
+- Asynchronous delivery with retries is confirmed; Celery and Redis are options, not selected infrastructure.
+- Do not commit API keys, credentials, or recipient data.
+
+## 28. Set retention and audit policy for deferred records
+Status: backlog
+Issue: https://github.com/Virgo-Alpha/steadwork/issues/28
+Goal: Decide retention for deferred records and personal data, and define which administrative actions need an audit trail.
+
+## Acceptance criteria
+
+- [ ] Define retention/deletion or anonymization for CV files and metadata, applications, external click events, invitations, notifications/email delivery records, and moderation actions.
+- [ ] Define behavior on candidate/company deletion, member removal, job removal, invitation expiry, and terminal email failure.
+- [ ] Define audited moderation/admin actions, actor/target/reason/time data, and audit access.
+- [ ] Identify decisions needing product or legal review, responsible owner, and resolution path.
+- [ ] Record approved rules in `_docs/specs.md` and `_docs/backend-plan.md`, linked from #23.
+- [ ] This issue changes no application code, API implementation, schema, or runtime infrastructure.
+
+## Out of scope
+
+- Deletion jobs, anonymization, audit storage, and retention enforcement; these depend on the approved policy and #23.
+
+## Constraints
+
+- Do not invent retention periods or claim a legal requirement without an authoritative decision.
+- Preserve existing MVP behavior until policy is recorded.
