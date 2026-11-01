@@ -748,29 +748,33 @@ Goal: Implement a gated, reviewable deployment and release path for an explicitl
 - Add observability and on-call automation only through separately groomed work.
 
 ## 26. Decide CV file storage, access, and retention
-Status: backlog
+Status: ready (product owner decisions requested)
 Issue: https://github.com/Virgo-Alpha/steadwork/issues/26
-Goal: Choose the product and technical policy for storing and serving candidate CV files before defining their persistence/API implementation.
+Goal: Record the product owner’s decisions for handling CV binaries in local development and production, including upload validation, private access, and CV-specific lifecycle behavior, before implementing the CV contract in #23.
 
 ## Acceptance criteria
 
-- [ ] Select storage for local development and production, including separation of files and credentials.
-- [ ] Define accepted types, size limits, upload validation, and malware scanning policy.
-- [ ] Define candidate and recruiter permissions for upload, list, download, select, and delete.
-- [ ] Define authenticated download behavior and failed-upload cleanup.
-- [ ] Define deletion/retention for candidate deletion, application retention, and backup expiry.
-- [ ] Record the policy in `_docs/specs.md` and `_docs/backend-plan.md`, linked from #23.
-- [ ] This issue changes no application code, API implementation, schema, or runtime infrastructure.
+- [ ] The product owner selects a private storage approach for development and production, records the rationale and environment separation, and documents how access credentials are provisioned, rotated and kept out of source control/logs. State whether the development path may use local filesystem storage and how production avoids public file access.
+- [ ] The product owner selects accepted file types and maximum size. The policy defines server-side type/signature and size validation, filename handling, and whether malware scanning is required; if scanning is required, define when a file becomes available and what rejected/infected files return to the user.
+- [ ] The access matrix specifies that candidates can upload, list, select, rename and delete only their own CVs; recruiters can access only the CV selected on an application for a job in a company they are authorized to manage; and platform-admin access is explicitly selected or denied. Include guest application CV handling without assuming guests own candidate profiles.
+- [ ] The download policy chooses an authenticated endpoint or short-lived private link, states how access is checked for every request, and prevents stable public URLs or cross-candidate/company access.
+- [ ] The lifecycle defines upload-pending, validation/scanning, available, failed/rejected and deletion states, including cleanup of partial files and failed uploads, retries, and deletion of a CV referenced by an application.
+- [ ] For candidate-requested CV deletion, candidate/account deletion, application retention, and backup expiry, document whether binaries are deleted, access-revoked, quarantined or retained, and how the application’s CV selection remains intelligible. Coordinate retention durations and cross-feature account/application policy with [#28](https://github.com/Virgo-Alpha/steadwork/issues/28); do not invent durations here.
+- [ ] Record the approved CV-specific storage, validation, access and lifecycle decisions in `_docs/specs.md` and `_docs/backend-plan.md`, distinguish decisions from unresolved #28 retention durations, and link #26 from #23.
+- [ ] This issue changes no application code, API implementation, database schema, dependencies or runtime infrastructure; it only records decisions.
 
 ## Out of scope
 
-- CV upload, file storage, metadata persistence, and download implementation; follow-up work depends on this decision and #23.
+- CV upload, file storage, metadata persistence and download implementation; these depend on the decisions in #26, cross-feature retention policy in [#28](https://github.com/Virgo-Alpha/steadwork/issues/28), and persistence/API contract in [#23](https://github.com/Virgo-Alpha/steadwork/issues/23).
+- Cross-feature retention durations and account/application deletion policy, tracked by [#28](https://github.com/Virgo-Alpha/steadwork/issues/28).
 
 ## Constraints
 
 - Do not commit CV files, credentials, or personal data.
 - Preserve multiple CVs and per-application CV selection.
-- Make privacy, access, deletion, and backup behavior explicit before implementation.
+- Do not select a storage vendor or product policy on behalf of the product owner; record the explicit decision and rationale.
+- Coordinate CV-specific behavior with the cross-feature retention policy in #28; do not invent retention periods.
+- Make privacy, access, deletion and backup behavior explicit before implementation.
 
 ## 27. Choose asynchronous email delivery and retry behavior
 Status: backlog
