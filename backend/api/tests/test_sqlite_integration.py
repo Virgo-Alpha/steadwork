@@ -244,5 +244,3 @@ def test_sqlite_failure_does_not_leave_partial_application_or_break_session(sqli
     assert [application["id"] for application in applications.json()] == ["application-1"]
     assert len(checked_in) > after_error_checkins
     assert candidate.get("/api/jobs/").status_code == 200
-
-
