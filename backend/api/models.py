@@ -97,6 +97,32 @@ class Application:
 
 
 @dataclass(frozen=True)
+class Membership:
+    user_id: str
+    company_id: str
+    role: str
+
+
+@dataclass
+class Notification:
+    id: str
+    user_id: str
+    title: str
+    body: str
+    read_at: Any = None
+    created_at: Any = None
+
+    def to_dict(self) -> dict[str, Any]:
+        result = {
+            "id": self.id, "title": self.title, "body": self.body,
+            "createdAt": self.created_at.isoformat() if hasattr(self.created_at, "isoformat") else (self.created_at or ""),
+        }
+        if self.read_at is not None:
+            result["readAt"] = self.read_at.isoformat() if hasattr(self.read_at, "isoformat") else self.read_at
+        return result
+
+
+@dataclass(frozen=True)
 class HealthStatus:
     status: str
     service: str

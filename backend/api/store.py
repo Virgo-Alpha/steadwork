@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from datetime import timedelta
 from django.utils import timezone
-from .models import Application, Company, Job, User
+from .models import Application, Company, Job, Membership, Notification, User
 from django.contrib.auth.hashers import make_password
 
 
@@ -15,6 +15,8 @@ class InMemoryStore:
     applications: list[Application]
     profiles: dict[str, dict]
     saved_jobs: dict[str, set[str]]
+    memberships: list[Membership]
+    notifications: list[Notification]
 
 
 def _seed() -> InMemoryStore:
@@ -43,6 +45,11 @@ def _seed() -> InMemoryStore:
                                    "Candidate", "candidate@example.com", "candidate.pdf", "", timezone.now())],
         profiles={},
         saved_jobs={},
+        memberships=[
+            Membership("user-recruiter", "company-acme", "recruiter"),
+            Membership("user-admin", "company-acme", "admin"),
+        ],
+        notifications=[],
     )
 
 

@@ -8,7 +8,7 @@ from rest_framework import status
 from .auth import authenticate, current_user, issue_token
 from dataclasses import replace
 
-from .models import Application
+from .models import Application, Job, Notification
 from .store import application_status, get_store
 
 
@@ -149,6 +149,51 @@ def _candidate(request):
     return user, None
 
 
+def _employer(request):
+    user = current_user(request)
+    if user is None:
+        return None, Response({"detail": "Authentication credentials were not provided."}, status=401)
+    membership = next((m for m in get_store().memberships if m.user_id == user.id and m.role in {"admin", "recruiter"}), None)
+    if membership is None:
+        return None, Response({"detail": "You do not have permission to perform this action."}, status=403)
+    return (user, membership), None
+
+
+def _company_job(job_id, company_id):
+    return next((job for job in get_store().jobs if job.id == job_id and job.company_id == company_id), None)
+
+
+def _job_values(data, partial=True):
+    allowed = {"title", "description", "location", "salaryMin", "salaryMax", "currency", "remotePolicy",
+               "jobType", "experienceLevel", "skills", "responsibilities", "qualifications", "benefits",
+               "applicationMethod", "externalApplyUrl", "deadline"}
+    if set(data) - allowed:
+        return None, _bad("Unknown job field.")
+    mapping = {"salaryMin": "salary_min", "salaryMax": "salary_max", "remotePolicy": "remote_policy",
+               "jobType": "job_type", "experienceLevel": "experience_level", "applicationMethod": "application_method",
+               "externalApplyUrl": "external_apply_url"}
+    values = {mapping.get(key, key): value for key, value in data.items()}
+    if not partial:
+        values.setdefault("title", "")
+    for key in ("title", "description", "location", "currency", "remote_policy", "job_type", "experience_level", "application_method"):
+        if key in values and not isinstance(values[key], str):
+            return None, _bad(f"Invalid {key}.")
+    for key in ("skills", "responsibilities", "qualifications", "benefits"):
+        if key in values and (not isinstance(values[key], list) or not all(isinstance(v, str) for v in values[key])):
+            return None, _bad(f"Invalid {key}.")
+    if "deadline" in values:
+        try:
+            values["deadline"] = _utc(values["deadline"])
+        except (TypeError, ValueError):
+            return None, _bad("Invalid deadline.")
+    return values, None
+
+
+def _company_notification(user_id, title, body):
+    now = datetime.now(dt_timezone.utc)
+    get_store().notifications.append(Notification(uuid4().hex, user_id, title, body, created_at=now))
+
+
 _PROFILE_DEFAULTS = {
     "headline": "", "location": "", "skills": [], "experience": "",
     "education": "", "preferences": "", "cvFiles": [], "defaultCvId": "",
@@ -267,6 +312,10 @@ def create_application(request):
                       values["candidateEmail"].strip(), values["cvName"], values["coverLetter"], datetime.now(dt_timezone.utc))
     get_store().applications.append(app)
     job.application_count += 1
+    if app.status != "External click":
+        for member in get_store().memberships:
+            if member.company_id == job.company_id:
+                _company_notification(member.user_id, "New application", f"{app.candidate_name} applied for {job.title}.")
     return Response(app.to_dict(), status=201)
 
 
@@ -288,6 +337,10 @@ def create_guest_application(request):
                       email, values["cvName"], values["coverLetter"], datetime.now(dt_timezone.utc))
     get_store().applications.append(app)
     job.application_count += 1
+    if app.status != "External click":
+        for member in get_store().memberships:
+            if member.company_id == job.company_id:
+                _company_notification(member.user_id, "New application", f"{app.candidate_name} applied for {job.title}.")
     return Response(app.to_dict(), status=201)
 
 
@@ -308,6 +361,139 @@ def withdraw_application(request, application_id):
     app = replace(app, status="Withdrawn")
     applications[index] = app
     return Response(app.to_dict())
+
+
+@api_view(["GET"])
+def employer_dashboard(request):
+    employer, error = _employer(request)
+    if error:
+        return error
+    _, membership = employer
+    jobs = [job for job in get_store().jobs if job.company_id == membership.company_id]
+    now = datetime.now(dt_timezone.utc)
+    active = [job for job in jobs if job.status == "Published" and job.deadline and _utc(job.deadline) > now]
+    job_ids = {job.id for job in jobs}
+    applications = [app for app in get_store().applications if app.job_id in job_ids]
+    recent = sorted(applications, key=lambda app: _utc(app.created_at), reverse=True)[:5]
+    return Response({"activeJobs": len(active), "totalJobs": len(jobs), "applications": len(applications),
+                     "shortlisted": sum(app.status == "Shortlisted" for app in applications),
+                     "recent": [app.to_dict() for app in recent]})
+
+
+@api_view(["GET", "POST"])
+def employer_jobs(request):
+    employer, error = _employer(request)
+    if error:
+        return error
+    _, membership = employer
+    store = get_store()
+    if request.method == "GET":
+        return Response([job.to_dict() for job in store.jobs if job.company_id == membership.company_id])
+    values, error = _job_values(request.data)
+    if error:
+        return error
+    job = Job(uuid4().hex, membership.company_id, values.pop("title", ""), **values)
+    store.jobs.append(job)
+    return Response(job.to_dict(), status=201)
+
+
+@api_view(["PATCH"])
+def employer_job(request, job_id):
+    employer, error = _employer(request)
+    if error:
+        return error
+    _, membership = employer
+    job = _company_job(job_id, membership.company_id)
+    if job is None:
+        return Response({"detail": "Job not found."}, status=404)
+    values, error = _job_values(request.data)
+    if error:
+        return error
+    if job.status in {"Published", "Closed", "Expired"} and "company_id" in values:
+        values.pop("company_id")
+    index = get_store().jobs.index(job)
+    get_store().jobs[index] = replace(job, **values)
+    return Response(get_store().jobs[index].to_dict())
+
+
+@api_view(["POST"])
+def employer_job_status(request, job_id):
+    employer, error = _employer(request)
+    if error:
+        return error
+    _, membership = employer
+    job = _company_job(job_id, membership.company_id)
+    if job is None:
+        return Response({"detail": "Job not found."}, status=404)
+    target = request.data.get("status")
+    if target not in {"Draft", "Published", "Closed", "Expired"}:
+        return _bad("Invalid status.")
+    now = datetime.now(dt_timezone.utc)
+    deadline = _utc(job.deadline) if job.deadline else None
+    valid = ((job.status == "Draft" and target == "Published" and deadline and deadline > now and job.title and job.description and job.location) or
+             (job.status == "Published" and target in {"Closed", "Expired"} and (target == "Expired" or (deadline and deadline <= now))) or
+             (job.status == "Closed" and target == "Published" and deadline and deadline > now) or
+             (job.status == "Expired" and target == "Published" and deadline and deadline > now))
+    if not valid:
+        return _bad("Invalid job status transition.")
+    index = get_store().jobs.index(job)
+    get_store().jobs[index] = replace(job, status=target, posted_at=(now if target == "Published" else job.posted_at))
+    return Response(get_store().jobs[index].to_dict())
+
+
+@api_view(["GET"])
+def employer_applications(request, job_id):
+    employer, error = _employer(request)
+    if error:
+        return error
+    _, membership = employer
+    job = _company_job(job_id, membership.company_id)
+    if job is None:
+        return Response({"detail": "Job not found."}, status=404)
+    return Response([app.to_dict() for app in get_store().applications if app.job_id == job.id])
+
+
+@api_view(["POST"])
+def employer_application_status(request, application_id):
+    employer, error = _employer(request)
+    if error:
+        return error
+    _, membership = employer
+    app = next((item for item in get_store().applications if item.id == application_id), None)
+    job = _company_job(app.job_id, membership.company_id) if app else None
+    if app is None or job is None:
+        return Response({"detail": "Application not found."}, status=404)
+    target = request.data.get("status")
+    allowed = {"Applied": {"Under Review"}, "Under Review": {"Shortlisted", "Rejected"}, "Shortlisted": {"Hired"}}
+    if target not in allowed.get(app.status, set()):
+        return _bad("Invalid application status transition.")
+    updated = replace(app, status=target)
+    get_store().applications[get_store().applications.index(app)] = updated
+    if updated.candidate_id:
+        _company_notification(updated.candidate_id, "Application status updated", f"Your application for {job.title} is now {target}.")
+    return Response(updated.to_dict())
+
+
+@api_view(["GET"])
+def notifications(request):
+    user = current_user(request)
+    if user is None:
+        return Response({"detail": "Authentication credentials were not provided."}, status=401)
+    items = [item for item in get_store().notifications if item.user_id == user.id]
+    items.sort(key=lambda item: _utc(item.created_at), reverse=True)
+    return Response([item.to_dict() for item in items])
+
+
+@api_view(["POST"])
+def notification_read(request, notification_id):
+    user = current_user(request)
+    if user is None:
+        return Response({"detail": "Authentication credentials were not provided."}, status=401)
+    item = next((item for item in get_store().notifications if item.id == notification_id and item.user_id == user.id), None)
+    if item is None:
+        return Response({"detail": "Notification not found."}, status=404)
+    item.read_at = item.read_at or datetime.now(dt_timezone.utc)
+    return Response(status=204)
 
 
 @api_view(["GET"])
