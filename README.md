@@ -80,3 +80,16 @@ running `make test` or `make e2e`. These demo accounts are for local
 development only. The E2E harness creates its own Compose project and database
 volume, waits for the app and database health checks, and removes only its
 project and volume on success, failure, or interruption.
+
+## GitHub Actions
+
+The CI workflow runs on pull requests and pushes to `main`. Frontend and
+backend tests run as parallel jobs; full validation also runs `make test`,
+which includes the isolated Compose-backed Playwright suite. Configure these
+repository Actions secrets for same-repository pull requests and pushes to
+`main`: `E2E_CANDIDATE_EMAIL`, `E2E_CANDIDATE_PASSWORD`,
+`E2E_RECRUITER_EMAIL`, and `E2E_RECRUITER_PASSWORD`. Use the seeded local demo
+accounts only. Fork pull requests do not receive repository secrets, so their
+parallel frontend/backend jobs run while the full E2E validation job is
+skipped. The workflow does not deploy or publish releases; the deployment
+outline in its comments is non-executable.
