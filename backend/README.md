@@ -25,5 +25,15 @@ uv run python manage.py check
 ```
 
 Resource routers, domain models, storage and authentication are separate
-modules. Seed data and resource endpoints are intentionally out of scope for
-this bootstrap.
+modules. The in-memory seed is deterministic: companies `company-acme` and
+`company-orbit`, jobs `job-platform` and `job-design`, and users
+`candidate@example.com`, `recruiter@example.com`, and
+`admin@example.com`. Demo passwords are respectively
+`candidate-password`, `recruiter-password`, and `admin-password`.
+
+`POST /api/auth/login/` returns an opaque, expiring bearer token. Protected
+probe routes are available at `/api/protected/{candidate,recruiter,admin}/`
+and require the matching role; an optional user ID suffix enforces ownership.
+Missing, malformed, invalid, or expired tokens return 401, while valid tokens
+without the required role or ownership return 403. Call `api.store.reset_store`
+between tests to restore the seed without shared state.
