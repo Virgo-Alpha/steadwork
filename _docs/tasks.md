@@ -612,31 +612,41 @@ Goal: Run the repository's unit, integration, and Compose-backed browser checks 
 - Keep observability and on-call automation as documented future work only.
 
 ## 22. Update the project README
-Goal: A new contributor can understand the problem, system behavior, local setup and project status from the README.
-Description: Rewrite or expand the README into a complete contributor guide. Explain the problem and expected behavior, then cover the frontend, backend, agent team, process, database, containerization, setup, Make commands, GitHub Actions and the public task tracker.
+Status: review
+Issue: https://github.com/Virgo-Alpha/steadwork/issues/22
+Worktree: `/tmp/steadwork-issue-22` (`issue-22-project-readme`)
+Engineer: `/root/engineer_22`
+Reviewer worktree: `/tmp/steadwork-review-22` (`issue-22-review`), commit `806f9e9`
+QA worktree: `/tmp/steadwork-qa-22` (`issue-22-qa`)
+Owned files: repository-root `README.md` only
+Goal: A new contributor can identify Steadwork’s intended users and current implementation, follow verified local setup and test instructions, and find the authoritative product, API, workflow, and backlog documents.
 
 ## Acceptance criteria
 
-- [ ] The README explains the job-board problem and intended users.
-- [ ] It describes supported public, candidate, employer and authentication behavior, including important limitations.
-- [ ] It documents the architecture, configuration, local development and test commands.
-- [ ] It has explicit sections for frontend, backend, agent team, process, database and containerization.
-- [ ] It documents setup and running with Make, including `make dev`, the unified test command and `make e2e`.
-- [ ] It explains GitHub Actions checks and the fact that deployment is not enabled yet.
-- [ ] It links to `openapi.yaml`, the relevant `_docs` specifications and the public GitHub issue tracker.
-- [ ] It explains mock, SQLite and PostgreSQL modes and the expected Docker Compose workflow.
-- [ ] Commands and links are checked against the repository and do not point to private-only resources.
+- [ ] The README explains the tech job-board problem and identifies public visitors, candidates, recruiters/employers, and administrators as product roles.
+- [ ] It separates implemented behavior from the product target: current job discovery, company views, candidate and employer workflows, and authentication are described only to the extent supported by the frontend/backend; deferred or mock-only behavior is labeled accurately.
+- [ ] It states that the root product/API documents describe requirements or proposed contracts where they exceed the implemented API, and links to `openapi.yaml`, `_docs/specs.md`, `_docs/backend-plan.md`, and `_docs/job_board_project_scope.md`.
+- [ ] It documents the current architecture and runtime: React/Vite frontend; Django/DRF HTTP backend with SQLAlchemy/Alembic persistence; SQLite for local development and PostgreSQL through Compose; the default frontend API mode and opt-in mock mode.
+- [ ] It gives verified root-level setup and run commands (`make install` or `make setup`, `make dev`), the default local URLs, and how to stop services or locate their logs.
+- [ ] It gives verified test commands and explains their scope and prerequisites: `make test-setup`, `make test`, `make test-fast`, and `make e2e`, including the four E2E environment variable names, Docker/Compose requirement, and isolated E2E cleanup behavior. It does not publish account passwords or secrets.
+- [ ] It documents the actual Compose workflow and its two services (`postgres`, `app`), required `.env` variable names, startup/log/shutdown commands, persistence volume behavior, and the destructive effect of `docker compose down -v`; it links to `backend/README.md` for detailed database/migration instructions.
+- [ ] It describes the GitHub Actions triggers and checks, including that fork pull requests skip the secrets-dependent full E2E validation, and clearly says the workflow does not deploy or publish releases.
+- [ ] It has clear sections or equivalent navigation for frontend, backend, database/containerization, agent team, and task process, linking to `frontend/README.md`, `backend/README.md`, `_docs/team/pm.md`, `_docs/team/software-engineer.md`, `_docs/team/qa-engineer.md`, and `_docs/process.md`.
+- [ ] It links to `_docs/tasks.md` and the public repository issue tracker, and identifies #23 (deferred persistence requirements), #24 (collaborative-session product decision), and #25 (production deployment/release) as open follow-ups, not prerequisites for the README or completed capabilities.
+- [ ] All commands, local paths, URLs, environment variable names, links, and claims about current behavior are checked against the repository; no private-only resource, credential, or unsupported promise is included.
 
 ## Out of scope
 
-- Implementing functionality described in the README, covered by #5–#21.
-- Product requirements changes beyond the existing specifications.
+- Implementing or expanding product/API behavior described in the product target; deferred persistence decisions are tracked in [#23](https://github.com/Virgo-Alpha/steadwork/issues/23), and collaborative interview/canvas scope is tracked in [#24](https://github.com/Virgo-Alpha/steadwork/issues/24).
+- Production hosting, deployment, and release publishing, tracked in [#25](https://github.com/Virgo-Alpha/steadwork/issues/25).
+- Changes to application code, CI behavior, or database/container implementation; those are outside this documentation task and are not prerequisites to it.
 
 ## Constraints
 
-- Keep documentation accurate to the implemented behavior.
-- Use repository-relative links for local documents.
-- Do not include secrets, personal credentials or unsupported promises.
+- Edit the root `README.md` only; link to existing repository documents rather than duplicating their detailed procedures.
+- Treat the current application and workflow as the source of truth for implemented behavior; label aspirational or proposed requirements as such.
+- Preserve the existing backend/API contract and avoid implying that incomplete endpoints, notifications, CV storage, team administration, moderation, or production deployment are live.
+- Do not include credentials, secrets, or personal/private resource links.
 
 ## 23. Define persistence requirements for deferred product features
 Status: backlog
