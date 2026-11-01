@@ -24,12 +24,13 @@ def create_database(url: str | None = None):
         raise DatabaseConfigurationError("Only SQLite DATABASE_URL values are supported by this backend.")
     if parsed.database and parsed.database != ":memory:" and not parsed.database.startswith("file:"):
         Path(parsed.database).expanduser().resolve().parent.mkdir(parents=True, exist_ok=True)
-    engine = create_engine(url, connect_args={"check_same_thread": False})
+    engine = create_engine(url, connect_args={"check_same_thread": False, "timeout": 30})
 
     @event.listens_for(engine, "connect")
     def enable_foreign_keys(connection, _record):
         cursor = connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.execute("PRAGMA busy_timeout=30000")
         cursor.close()
 
     Base.metadata.create_all(engine)
@@ -146,5 +147,78 @@ class SQLAlchemyStoreRepository:
                 id=item.id, user_id=item.user_id, title=item.title, body=item.body,
                 read_at=item.read_at, created_at=item.created_at, position=position,
             ))
+        self.session.flush()
+
+    def apply_changes(self, before, after):
+        """Persist only records changed by this request.
+
+        Requests take a SQLite ``BEGIN IMMEDIATE`` lock before hydration, so
+        their before/after snapshots are serialized with other API requests.
+        This diff also makes read-only requests issue no table writes.
+        """
+        def sync(model, old_items, new_items, key_of, record_of):
+            old_by_key = {key_of(item): item for item in old_items}
+            new_by_key = {key_of(item): item for item in new_items}
+            for key in old_by_key.keys() - new_by_key.keys():
+                record = self.session.get(model, key)
+                if record is not None:
+                    self.session.delete(record)
+            for key, item in new_by_key.items():
+                if key not in old_by_key or item != old_by_key[key]:
+                    self.session.merge(record_of(item, key))
+
+        sync(
+            UserRecord, before.users, after.users, lambda item: item.id,
+            lambda item, key: UserRecord(id=key, email=item.email, role=item.role, password_hash=item.password_hash,
+                                          position=after.users.index(item)),
+        )
+        sync(
+            CompanyRecord, before.companies, after.companies, lambda item: item.id,
+            lambda item, key: CompanyRecord(id=key, name=item.name, description=item.description, website=item.website,
+                                             logo=item.logo, accent=item.accent, position=after.companies.index(item)),
+        )
+        sync(
+            JobRecord, before.jobs, after.jobs, lambda item: item.id,
+            lambda item, key: JobRecord(
+                id=key, company_id=item.company_id, title=item.title, description=item.description, location=item.location,
+                salary_min=item.salary_min, salary_max=item.salary_max, currency=item.currency, remote_policy=item.remote_policy,
+                job_type=item.job_type, experience_level=item.experience_level, skills=item.skills or [],
+                responsibilities=item.responsibilities or [], qualifications=item.qualifications or [], benefits=item.benefits or [],
+                application_method=item.application_method, external_apply_url=item.external_apply_url, status=item.status,
+                posted_at=item.posted_at, deadline=item.deadline, application_count=item.application_count,
+                position=after.jobs.index(item),
+            ),
+        )
+        sync(
+            ApplicationRecord, before.applications, after.applications, lambda item: item.id,
+            lambda item, key: ApplicationRecord(
+                id=key, job_id=item.job_id, candidate_id=item.candidate_id, status=item.status,
+                candidate_name=item.candidate_name, candidate_email=item.candidate_email, cv_name=item.cv_name,
+                cover_letter=item.cover_letter, created_at=item.created_at, position=after.applications.index(item),
+            ),
+        )
+        sync(
+            ProfileRecord, list(before.profiles.items()), list(after.profiles.items()), lambda pair: pair[0],
+            lambda pair, key: ProfileRecord(user_id=key, data=dict(pair[1])),
+        )
+        sync(
+            SavedJobRecord,
+            [(user_id, job_id) for user_id, job_ids in before.saved_jobs.items() for job_id in job_ids],
+            [(user_id, job_id) for user_id, job_ids in after.saved_jobs.items() for job_id in job_ids],
+            lambda pair: pair, lambda pair, key: SavedJobRecord(user_id=key[0], job_id=key[1]),
+        )
+        sync(
+            MembershipRecord, before.memberships, after.memberships,
+            lambda item: (item.user_id, item.company_id),
+            lambda item, key: MembershipRecord(user_id=key[0], company_id=key[1], role=item.role,
+                                               position=after.memberships.index(item)),
+        )
+        sync(
+            NotificationRecord, before.notifications, after.notifications, lambda item: item.id,
+            lambda item, key: NotificationRecord(
+                id=key, user_id=item.user_id, title=item.title, body=item.body, read_at=item.read_at,
+                created_at=item.created_at, position=after.notifications.index(item),
+            ),
+        )
         self.session.flush()
 

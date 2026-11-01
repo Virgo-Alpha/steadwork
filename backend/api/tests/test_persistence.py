@@ -1,5 +1,7 @@
 """Focused persistence tests for issue #14; SQLite stays isolated per test."""
 
+from copy import deepcopy
+
 import pytest
 from django.conf import settings
 from sqlalchemy import event
@@ -162,6 +164,42 @@ def test_store_repository_round_trips_all_domain_data_and_updates(tmp_path):
     engine.dispose()
 
 
+def test_stale_request_diff_cannot_erase_a_newer_committed_mutation(tmp_path):
+    from api.repositories import create_database
+
+    engine, factory = create_database(f"sqlite:///{tmp_path / 'stale-request.sqlite3'}")
+    with factory() as session:
+        repository = SQLAlchemyStoreRepository(session)
+        initial = repository.load()
+        session.commit()
+
+    # Request B hydrates an older snapshot, then pauses before its route writes.
+    with factory() as session_b:
+        stale = deepcopy(SQLAlchemyStoreRepository(session_b).load())
+
+    # Request A commits a saved-job mutation after B's snapshot was taken.
+    with factory() as session_a:
+        repository_a = SQLAlchemyStoreRepository(session_a)
+        current = repository_a.load()
+        before_a = deepcopy(current)
+        current.saved_jobs["user-candidate"] = {"job-design"}
+        repository_a.apply_changes(before_a, current)
+        session_a.commit()
+
+    # B then commits an unrelated notification from its old snapshot. A full
+    # snapshot replacement would drop A's saved job; the row diff cannot.
+    stale.notifications.append(Notification("stale-note", "user-candidate", "Saved job", "Body"))
+    with factory() as session_b:
+        SQLAlchemyStoreRepository(session_b).apply_changes(initial, stale)
+        session_b.commit()
+
+    with factory() as session:
+        final = SQLAlchemyStoreRepository(session).load()
+        assert final.saved_jobs["user-candidate"] == {"job-design"}
+        assert [item.id for item in final.notifications] == ["stale-note"]
+    engine.dispose()
+
+
 def test_sqlite_requests_keep_api_behavior_and_close_sessions_after_errors(tmp_path):
     from django.test import override_settings
     from api.middleware import _database
@@ -178,6 +216,16 @@ def test_sqlite_requests_keep_api_behavior_and_close_sessions_after_errors(tmp_p
             health = client.get("/api/health/")
             assert health.status_code == 200
             assert health.json()["store"] == "sqlite"
+            engine, _ = _database(database_url)
+            writes = []
+            event.listen(
+                engine,
+                "before_cursor_execute",
+                lambda _connection, _cursor, statement, *_: writes.append(statement)
+                if statement.lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE")) else None,
+            )
+            assert client.get("/api/jobs/").status_code == 200
+            assert writes == []
             assert anonymous.get("/api/protected/candidate/").status_code == 401
             assert client.get("/api/candidate/profile/").status_code == 401
             login = client.post(
