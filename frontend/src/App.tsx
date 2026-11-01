@@ -15,6 +15,12 @@ function useLoad<T>(loader: () => Promise<T>, deps: unknown[] = []) {
   }, [...deps, tick]);
   return { data, error, loading, reload, setData };
 }
+function hasSessionToken() {
+  return typeof window !== 'undefined' && Boolean(window.sessionStorage.getItem('steadwork.access_token'));
+}
+function isEmployerRole(role: User['role'] | string) {
+  return role === 'company' || role === 'recruiter' || role === 'admin';
+}
 function Notice({ text, close }: { text: string; close: () => void }) {
   if (!text) return null;
   return <div className="toast-note" role="status" data-testid="status-feedback" style={{ position: 'fixed', zIndex: 50, right: 20, bottom: 20, maxWidth: 360, display: 'flex', gap: 12, alignItems: 'center', background: 'hsl(var(--foreground))', color: 'hsl(var(--background))', padding: '13px 16px', borderRadius: 9, boxShadow: '0 14px 40px #18233330' }}>{text}<button data-testid="button-dismiss-feedback" onClick={close} aria-label="Dismiss"><X size={15}/></button></div>;
@@ -25,10 +31,10 @@ function InlineError({ text }: { text: string }) {
 }
 function AppShell({ children }: { children: ReactNode }) {
   const [path, setLocation] = useLocation();
-  const user = useLoad<User>(() => service.getCurrentUser(), [path]);
+  const user = useLoad<User | null>(() => hasSessionToken() ? service.getCurrentUser() : Promise.resolve(null), [path]);
   const [toast, setToast] = useState('');
   const [role, setRole] = useState<'candidate' | 'company'>('candidate');
-  useEffect(() => { user.data && setRole(user.data.role === 'company' ? 'company' : 'candidate'); }, [user.data]);
+  useEffect(() => { user.data && setRole(isEmployerRole(user.data.role) ? 'company' : 'candidate'); }, [user.data]);
   const updateRole = async (next: 'candidate' | 'company') => {
     try {
       const updated = await service.switchRole(next);
@@ -332,7 +338,7 @@ function EmployerJobsPage() {
   useEffect(() => setJobs(data || []), [data]);
   const update = async (job: Job, status: JobStatus) => { try { const changed = await service.setJobStatus(job.id, status); setJobs(xs => xs.map(x => x.id === job.id ? changed : x)); setNote(`${job.title} is now ${status.toLowerCase()}.`); } catch (reason) { setNote(reason instanceof Error ? reason.message : 'Could not update role status.'); } };
   return <div className="main-wrap page-enter" style={{ paddingTop: 42, maxWidth: 1000 }}><PageTitle kicker="Hiring desk" title="Manage your roles" subtitle="Every listing, with its status and applicant count." side={<Link href="/employer/jobs/new" className="btn btn-primary" data-testid="button-create-job"><span>+</span> New role</Link>}/>
-    {note && <div role="status" style={{ marginBottom: 12, color: 'hsl(var(--primary))', fontSize: 12 }}>{note}</div>}
+    {note && <div role="alert" style={{ marginBottom: 12, color: 'hsl(var(--primary))', fontSize: 12 }}>{note}</div>}
     {loading ? <div className="surface skeleton" style={{ height: 220 }}/> : error ? <ErrorState message={error} retry={reload}/> : jobs.length ? <div className="surface" style={{ overflow: 'hidden' }}>{jobs.map((job,i) => <div key={job.id} data-testid={`row-employer-job-${job.id}`} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 17, alignItems: 'center', padding: '17px 20px', borderBottom: i === jobs.length-1 ? 0 : '1px solid hsl(var(--border))' }}><div><Link href={`/employer/jobs/${job.id}/applicants`} style={{ fontFamily: 'var(--app-font-serif)', fontWeight: 800 }}>{job.title}</Link><div style={{ fontSize: 11, color: 'hsl(var(--muted-foreground))', marginTop: 5 }}>{job.location} · {job.applicationCount} applicants · Updated {job.postedAt}</div></div><StatusPill value={job.status}/><div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', justifyContent: 'end' }}><Link href={`/employer/jobs/new?id=${job.id}`} className="btn btn-outline" data-testid={`button-edit-job-${job.id}`} style={{ minHeight: 34, padding: '0 10px', fontSize: 11 }}>Edit</Link>{job.status === 'Draft' && <button className="btn btn-primary" data-testid={`button-publish-job-${job.id}`} style={{ minHeight: 34, padding: '0 10px', fontSize: 11 }} onClick={() => update(job,'Published')}>Publish</button>}{job.status === 'Published' && <button className="btn btn-outline" data-testid={`button-close-job-${job.id}`} style={{ minHeight: 34, padding: '0 10px', fontSize: 11 }} onClick={() => update(job,'Closed')}>Close</button>}{job.status === 'Closed' && <button className="btn btn-primary" data-testid={`button-reopen-job-${job.id}`} style={{ minHeight: 34, padding: '0 10px', fontSize: 11 }} onClick={() => update(job,'Published')}>Reopen</button>}<Link href={`/employer/jobs/${job.id}/applicants`} className="btn btn-quiet" data-testid={`button-review-applicants-${job.id}`} style={{ minHeight: 34, padding: '0 10px', fontSize: 11 }}>Applicants <ArrowRight size={13}/></Link></div></div>)}</div> : <EmptyState title="Your first role starts here" body="Add the details candidates need to decide if this is their next good fit." action={<Link className="btn btn-primary" href="/employer/jobs/new">Create a role</Link>}/>}
   </div>;
 }
@@ -375,7 +381,7 @@ function ApplicantsPage() {
   useEffect(() => setApps(data || []), [data]);
   const updateStatus = async (app: Application, status: ApplicationStatus) => { try { const result = await service.updateApplicationStatus(app.id, status); setApps(xs => xs.map(x => x.id === app.id ? result : x)); setNotice(`${app.candidateName} marked ${status}.`); } catch (reason) { setNotice(reason instanceof Error ? reason.message : 'Could not update application status.'); } };
   return <div className="main-wrap page-enter" style={{ paddingTop: 42, maxWidth: 1000 }}><Link href="/employer/jobs" className="nav-link" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, marginBottom: 20 }}><ArrowLeft size={14}/> Manage roles</Link><PageTitle kicker="Hiring desk · candidates" title={job?.title || 'Applicants'} subtitle={`${apps.length} people have raised their hand for this role.`}/>
-    {notice && <div role="status" style={{ marginBottom: 12, color: 'hsl(var(--primary))', fontSize: 12 }}>{notice}</div>}
+    {notice && <div role="alert" style={{ marginBottom: 12, color: 'hsl(var(--primary))', fontSize: 12 }}>{notice}</div>}
     {loading ? <div className="surface skeleton" style={{ height: 180 }}/> : error ? <ErrorState message={error} retry={reload}/> : apps.length ? <div className="surface" style={{ overflow: 'hidden' }}>{apps.map((app,i) => <div key={app.id} data-testid={`row-applicant-${app.id}`} style={{ padding: 19, borderBottom: i === apps.length-1 ? 0 : '1px solid hsl(var(--border))', display: 'grid', gridTemplateColumns: '1fr auto', gap: 16, alignItems: 'center' }}><div><div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}><strong style={{ fontFamily: 'var(--app-font-serif)', fontSize: 16 }}>{app.candidateName}</strong><StatusPill value={app.status}/></div><div style={{ fontSize: 11, color: 'hsl(var(--muted-foreground))', marginTop: 6 }}>{app.candidateEmail} · Applied {app.createdAt} · CV: {app.cvName}</div>{app.coverLetter && <p style={{ fontSize: 12, color: 'hsl(var(--muted-foreground))', lineHeight: 1.55, maxWidth: 630, margin: '10px 0 0' }}>{app.coverLetter}</p>}</div><div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'end', gap: 6 }}><select aria-label={`Update status for ${app.candidateName}`} className="field" data-testid={`select-applicant-status-${app.id}`} style={{ width: 150, minHeight: 35, padding: '6px 8px' }} value={app.status} onChange={e => updateStatus(app,e.target.value as ApplicationStatus)}>{['Applied','Under Review','Shortlisted','Rejected','Hired','Withdrawn','External click'].map(x => <option key={x}>{x}</option>)}</select><a className="btn btn-outline" href={`mailto:${app.candidateEmail}`} data-testid={`link-email-applicant-${app.id}`} style={{ minHeight: 35, fontSize: 11 }}>Email</a></div></div>)}</div> : <EmptyState title="No applications yet" body="When someone applies, their details and status controls will appear here."/>}
   </div>;
 }

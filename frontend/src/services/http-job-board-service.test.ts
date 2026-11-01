@@ -37,6 +37,12 @@ describe('HttpJobBoardService', () => {
     expect(new Headers(options.headers).get('Authorization')).toBe('Bearer token-1');
   });
 
+  it('bootstraps the current user from the authenticated endpoint even without cached user data', async () => {
+    vi.mocked(fetch).mockResolvedValue(response({ id: 'u2', email: 'b@example.com', role: 'admin' }));
+    await expect(service.getCurrentUser()).resolves.toEqual({ id: 'u2', email: 'b@example.com', role: 'admin' });
+    expect(fetch).toHaveBeenCalledWith('/api/auth/me/', expect.objectContaining({ headers: expect.any(Headers) }));
+  });
+
   it('clears the session and exposes backend detail on unauthorized responses', async () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(response({ access_token: 'token-1', token_type: 'Bearer', user: { id: 'u1', email: 'a@example.com', role: 'candidate' } }))
