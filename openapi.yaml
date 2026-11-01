@@ -1,1202 +1,620 @@
 openapi: 3.0.3
 info:
-  title: Steadwork frontend backend contract
+  title: Steadwork Backend API
   version: 1.0.0
-  description: 'Contract derived from frontend/src/services/http-job-board-service.ts and frontend/src/domain/types.ts,
-    with permission assumptions from docs/backend-plan.md. No live backend is configured. All paths have
-    trailing slashes and are relative to /api. Requests with bodies use application/json and camelCase
-    keys. Lists are bare JSON arrays, without pagination envelopes.
-
-
-    The client sends credentials: include on every request and does not send bearer tokens. Session-cookie
-    authentication and role/ownership requirements below are proposed backend requirements, not enforced
-    by the HTTP adapter or mock. The session cookie name sessionid is a Django convention assumed here.
-    Registration and login must establish the browser session. The backend plan calls for CSRF protection
-    on unsafe methods, but the current adapter sends no CSRF token; CSRF bootstrap/header handling must
-    be resolved during backend integration.
-
-
-    Success codes are conventional choices for this proposed contract: the client accepts any 2xx response,
-    parses JSON unless the status is 204, and only uses status codes for errors. Methods returning void
-    are specified as 204 with no body; an empty 200 would fail JSON parsing. Error response bodies are
-    unspecified because the frontend never reads them. String IDs have no UUID constraint; date strings
-    have no imposed format because the frontend uses both dates and timestamps. Optional TypeScript fields
-    may be omitted, rather than returned as null.
-
-
-    resetDemo() is a local no-op in the HTTP adapter and has no endpoint. There are no logout, password-reset
-    completion, CV upload/download, company mutation, or employer job-detail GET operations in this adapter,
-    even where planning notes mention future capabilities.'
+  description: >-
+    Contract for the API consumed by the frontend HTTP job board service.
+    Paths are mounted below /api. Registration, password reset, recommendations,
+    email verification, role switching, and demo reset are not exposed by this
+    backend client and are not part of this contract.
 servers:
-- url: /api
-  description: Same-origin API used by the frontend
-security:
-- sessionAuth: []
+  - url: /api
+    description: API prefix (the frontend prepends /api to every request)
+tags:
+  - name: Health
+  - name: Authentication
+  - name: Jobs
+  - name: Companies
+  - name: Candidate
+  - name: Applications
+  - name: Employer
+  - name: Notifications
 paths:
-  /jobs/:
+  /health/:
     get:
-      operationId: listJobs
-      summary: List published jobs
-      tags:
-      - jobs
+      tags: [Health]
+      summary: Backend liveness and store status
       security: []
-      description: Authentication is not required.
       responses:
         '200':
-          description: Successful operation.
+          description: Service is responding
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Job'
-        default:
-          $ref: '#/components/responses/Error'
-      parameters:
-      - name: keyword
-        in: query
-        required: false
-        schema:
-          type: string
-        description: Search text.
-      - name: location
-        in: query
-        required: false
-        schema:
-          type: string
-        description: Location text.
-      - name: jobType
-        in: query
-        required: false
-        schema:
-          type: string
-        description: Filter by jobType.
-      - name: remotePolicy
-        in: query
-        required: false
-        schema:
-          type: string
-        description: Filter by remotePolicy.
-      - name: experienceLevel
-        in: query
-        required: false
-        schema:
-          type: string
-        description: Filter by experienceLevel.
-      - name: companyId
-        in: query
-        required: false
-        schema:
-          type: string
-        description: Filter by companyId.
-      - name: salaryMin
-        in: query
-        required: false
-        schema:
-          type: number
-        description: Minimum acceptable salary; the mock compares against salaryMax.
-      - name: skills
-        in: query
-        required: false
-        schema:
-          type: array
-          items:
-            type: string
-        description: Comma-separated skills, e.g. React,TypeScript.
-        style: form
-        explode: false
-      - name: postedWithin
-        in: query
-        required: false
-        schema:
-          type: number
-        description: Maximum posting age in days.
-      - name: sort
-        in: query
-        required: false
-        schema:
-          type: string
-          enum:
-          - recent
-          - salary
-          - relevance
-        description: Requested ordering; the mock treats relevance like recent.
-  /jobs/{id}/:
-    get:
-      operationId: getJob
-      summary: Get a job
-      tags:
-      - jobs
-      security: []
-      description: Authentication is not required.
-      parameters:
-      - $ref: '#/components/parameters/Id'
-      responses:
-        '200':
-          description: Successful operation.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Job'
-        default:
-          $ref: '#/components/responses/Error'
-  /companies/:
-    get:
-      operationId: listCompanies
-      summary: List companies
-      tags:
-      - companies
-      security: []
-      description: Authentication is not required.
-      responses:
-        '200':
-          description: Successful operation.
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Company'
-        default:
-          $ref: '#/components/responses/Error'
-  /companies/{id}/:
-    get:
-      operationId: getCompany
-      summary: Get a company
-      tags:
-      - companies
-      security: []
-      description: Authentication is not required.
-      parameters:
-      - $ref: '#/components/parameters/Id'
-      responses:
-        '200':
-          description: Successful operation.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Company'
-        default:
-          $ref: '#/components/responses/Error'
-  /jobs/recommended/:
-    get:
-      operationId: recommendJobs
-      summary: Get jobs recommended for the candidate
-      tags:
-      - jobs
-      description: Requires an authenticated candidate session; access is scoped to the current candidate.
-      responses:
-        '200':
-          description: Successful operation.
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Job'
-        default:
-          $ref: '#/components/responses/Error'
-        '401':
-          description: A required session is missing or invalid (when applicable to token verification).
-            Error body is unspecified.
-        '403':
-          description: Permission, ownership, or CSRF validation failed. Error body is unspecified.
-  /saved-jobs/:
-    get:
-      operationId: listSavedJobs
-      summary: List saved jobs
-      tags:
-      - saved-jobs
-      description: Requires an authenticated candidate session; access is scoped to the current candidate.
-      responses:
-        '200':
-          description: Successful operation.
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Job'
-        default:
-          $ref: '#/components/responses/Error'
-        '401':
-          description: A required session is missing or invalid (when applicable to token verification).
-            Error body is unspecified.
-        '403':
-          description: Permission, ownership, or CSRF validation failed. Error body is unspecified.
-    post:
-      operationId: saveJob
-      summary: Save a job
-      tags:
-      - saved-jobs
-      description: Requires an authenticated candidate session; access is scoped to the current candidate.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SaveJobInput'
-      responses:
-        '204':
-          description: Successful operation; no response body.
-        default:
-          $ref: '#/components/responses/Error'
-        '401':
-          description: A required session is missing or invalid (when applicable to token verification).
-            Error body is unspecified.
-        '403':
-          description: Permission, ownership, or CSRF validation failed. Error body is unspecified.
-  /saved-jobs/{id}/:
-    delete:
-      operationId: unsaveJob
-      summary: Unsave a job
-      tags:
-      - saved-jobs
-      description: Requires an authenticated candidate session; access is scoped to the current candidate.
-      parameters:
-      - $ref: '#/components/parameters/Id'
-      responses:
-        '204':
-          description: Successful operation; no response body.
-        default:
-          $ref: '#/components/responses/Error'
-        '401':
-          description: A required session is missing or invalid (when applicable to token verification).
-            Error body is unspecified.
-        '403':
-          description: Permission, ownership, or CSRF validation failed. Error body is unspecified.
-  /auth/me/:
-    get:
-      operationId: getCurrentUser
-      summary: Get the current user
-      tags:
-      - auth
-      description: Requires an authenticated session.
-      responses:
-        '200':
-          description: Successful operation.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/User'
-        default:
-          $ref: '#/components/responses/Error'
-        '401':
-          description: A required session is missing or invalid (when applicable to token verification).
-            Error body is unspecified.
-        '403':
-          description: Permission, ownership, or CSRF validation failed. Error body is unspecified.
-  /auth/register/:
-    post:
-      operationId: registerAccount
-      summary: Register and establish a session
-      tags:
-      - auth
-      security: []
-      description: Authentication is not required.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AccountRegistration'
-      responses:
-        '201':
-          description: Successful operation.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/User'
-        default:
-          $ref: '#/components/responses/Error'
+                type: object
+                required: [status, service, store, authenticated]
+                properties:
+                  status: { type: string, example: ok }
+                  service: { type: string, example: steadwork-backend }
+                  store: { type: string, example: sqlite }
+                  authenticated: { type: boolean }
   /auth/login/:
     post:
-      operationId: login
-      summary: Sign in and establish a session
-      tags:
-      - auth
+      tags: [Authentication]
+      summary: Sign in and receive a bearer token
       security: []
-      description: Authentication is not required.
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              $ref: '#/components/schemas/LoginInput'
+            schema: { $ref: '#/components/schemas/LoginInput' }
       responses:
         '200':
-          description: Successful operation.
+          description: Authenticated session
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/User'
-        default:
-          $ref: '#/components/responses/Error'
-  /auth/verify-email/:
-    post:
-      operationId: verifyEmail
-      summary: Verify an email address
-      tags:
-      - auth
-      description: No session is required when a valid verification token is supplied. Tokenless calls
-        send {} and require a current session plus backend-defined verification behavior; production verification
-        policy is not specified by the client.
-      security:
-      - {}
-      - sessionAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/VerifyEmailInput'
+                type: object
+                required: [access_token, token_type, user]
+                properties:
+                  access_token: { type: string }
+                  token_type: { type: string, enum: [Bearer] }
+                  user: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /auth/me/:
+    get:
+      tags: [Authentication]
+      summary: Get the current user
+      security: [{ bearerAuth: [] }]
       responses:
         '200':
-          description: Successful operation.
+          description: Current user
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/User'
-        default:
-          $ref: '#/components/responses/Error'
-        '401':
-          description: A required session is missing or invalid (when applicable to token verification).
-            Error body is unspecified.
-        '403':
-          description: Permission, ownership, or CSRF validation failed. Error body is unspecified.
-  /auth/password-reset/:
-    post:
-      operationId: requestPasswordReset
-      summary: Request a password reset email
-      tags:
-      - auth
+              schema: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /jobs/:
+    get:
+      tags: [Jobs]
+      summary: List published jobs
       security: []
-      description: Authentication is not required.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PasswordResetInput'
-      responses:
-        '204':
-          description: Successful operation; no response body.
-        default:
-          $ref: '#/components/responses/Error'
-  /auth/demo-role/:
-    post:
-      operationId: switchRole
-      summary: Switch the demo user role
-      tags:
-      - auth
-      description: Requires an authenticated session. Demo-only operation; production availability must
-        be decided by the backend.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DemoRoleInput'
+      parameters:
+        - { name: keyword, in: query, schema: { type: string } }
+        - { name: location, in: query, schema: { type: string } }
+        - { name: jobType, in: query, schema: { type: string, enum: [Full-time, Part-time, Contract, Internship] } }
+        - { name: remotePolicy, in: query, schema: { type: string, enum: [Remote, Hybrid, On-site] } }
+        - { name: experienceLevel, in: query, schema: { type: string, enum: [Entry, Mid, Senior, Lead] } }
+        - { name: salaryMin, in: query, schema: { type: number, minimum: 0 } }
+        - name: skills
+          in: query
+          description: Comma-separated list; all supplied skills must match.
+          schema: { type: string }
+        - { name: companyId, in: query, schema: { type: string } }
+        - { name: postedWithin, in: query, description: Maximum age in days, schema: { type: number, minimum: 0 } }
+        - { name: sort, in: query, schema: { type: string, enum: [recent, salary, relevance], default: recent } }
       responses:
         '200':
-          description: Successful operation.
+          description: Matching jobs
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/User'
-        default:
-          $ref: '#/components/responses/Error'
-        '401':
-          description: A required session is missing or invalid (when applicable to token verification).
-            Error body is unspecified.
-        '403':
-          description: Permission, ownership, or CSRF validation failed. Error body is unspecified.
+              schema: { type: array, items: { $ref: '#/components/schemas/Job' } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /jobs/{jobId}/:
+    get:
+      tags: [Jobs]
+      summary: Get a published job
+      security: []
+      parameters:
+        - { $ref: '#/components/parameters/jobId' }
+      responses:
+        '200':
+          description: Job
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Job' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /companies/:
+    get:
+      tags: [Companies]
+      summary: List companies
+      security: []
+      responses:
+        '200':
+          description: Companies
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Company' } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /companies/{companyId}/:
+    get:
+      tags: [Companies]
+      summary: Get a company
+      security: []
+      parameters:
+        - { name: companyId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Company
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Company' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /saved-jobs/:
+    get:
+      tags: [Candidate]
+      summary: List the candidate's saved jobs
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Saved jobs
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Job' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Candidate]
+      summary: Save a job
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [jobId]
+              properties:
+                jobId: { type: string }
+      responses:
+        '204': { description: Job saved; response body is empty }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /saved-jobs/{jobId}/:
+    delete:
+      tags: [Candidate]
+      summary: Remove a saved job
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/jobId' }
+      responses:
+        '204': { description: Job removed; response body is empty }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /candidate/profile/:
     get:
-      operationId: getProfile
+      tags: [Candidate]
       summary: Get the candidate profile
-      tags:
-      - candidate
-      description: Requires an authenticated candidate session; access is scoped to the current candidate.
+      security: [{ bearerAuth: [] }]
       responses:
         '200':
-          description: Successful operation.
+          description: Candidate profile
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/CandidateProfile'
-        default:
-          $ref: '#/components/responses/Error'
-        '401':
-          description: A required session is missing or invalid (when applicable to token verification).
-            Error body is unspecified.
-        '403':
-          description: Permission, ownership, or CSRF validation failed. Error body is unspecified.
+              schema: { $ref: '#/components/schemas/CandidateProfile' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
     patch:
-      operationId: updateProfile
+      tags: [Candidate]
       summary: Partially update the candidate profile
-      tags:
-      - candidate
-      description: Requires an authenticated candidate session; access is scoped to the current candidate.
+      security: [{ bearerAuth: [] }]
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              $ref: '#/components/schemas/CandidateProfilePatch'
+            schema: { $ref: '#/components/schemas/CandidateProfilePatch' }
       responses:
         '200':
-          description: Successful operation.
+          description: Updated candidate profile
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/CandidateProfile'
-        default:
-          $ref: '#/components/responses/Error'
-        '401':
-          description: A required session is missing or invalid (when applicable to token verification).
-            Error body is unspecified.
-        '403':
-          description: Permission, ownership, or CSRF validation failed. Error body is unspecified.
+              schema: { $ref: '#/components/schemas/CandidateProfile' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /candidate/applications/:
     get:
-      operationId: listApplications
-      summary: List the candidate applications
-      tags:
-      - candidate
-      description: Requires an authenticated candidate session; access is scoped to the current candidate.
+      tags: [Candidate, Applications]
+      summary: List the current candidate's applications
+      security: [{ bearerAuth: [] }]
       responses:
         '200':
-          description: Successful operation.
+          description: Applications
           content:
             application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Application'
-        default:
-          $ref: '#/components/responses/Error'
-        '401':
-          description: A required session is missing or invalid (when applicable to token verification).
-            Error body is unspecified.
-        '403':
-          description: Permission, ownership, or CSRF validation failed. Error body is unspecified.
+              schema: { type: array, items: { $ref: '#/components/schemas/Application' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /applications/:
     post:
-      operationId: submitApplication
-      summary: Submit a signed-in application
-      tags:
-      - applications
-      description: Requires an authenticated candidate session; access is scoped to the current candidate.
+      tags: [Applications]
+      summary: Apply as the authenticated candidate
+      security: [{ bearerAuth: [] }]
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              $ref: '#/components/schemas/ApplicationInput'
+            schema: { $ref: '#/components/schemas/ApplicationInput' }
       responses:
         '201':
-          description: Successful operation.
+          description: Created application
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/Application'
-        default:
-          $ref: '#/components/responses/Error'
-        '401':
-          description: A required session is missing or invalid (when applicable to token verification).
-            Error body is unspecified.
-        '403':
-          description: Permission, ownership, or CSRF validation failed. Error body is unspecified.
+              schema: { $ref: '#/components/schemas/Application' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
   /applications/guest/:
     post:
-      operationId: submitGuestApplication
+      tags: [Applications]
       summary: Submit a guest application
-      tags:
-      - applications
       security: []
-      description: Authentication is not required. Guest applications have no candidateId and cannot be
-        tracked or withdrawn through candidate endpoints. External applications may be recorded with status
-        External click.
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              $ref: '#/components/schemas/ApplicationInput'
+            schema: { $ref: '#/components/schemas/ApplicationInput' }
       responses:
         '201':
-          description: Successful operation.
+          description: Created application
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/Application'
-        default:
-          $ref: '#/components/responses/Error'
-  /applications/{id}/withdraw/:
+              schema: { $ref: '#/components/schemas/Application' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /applications/{applicationId}/withdraw/:
     post:
-      operationId: withdrawApplication
-      summary: Withdraw an owned application
-      tags:
-      - applications
-      description: Requires an authenticated candidate session; access is scoped to the current candidate.
-        Sends no request body. Returns the application with status Withdrawn.
+      tags: [Applications]
+      summary: Withdraw an application belonging to the candidate
+      security: [{ bearerAuth: [] }]
       parameters:
-      - $ref: '#/components/parameters/Id'
+        - { name: applicationId, in: path, required: true, schema: { type: string } }
       responses:
         '200':
-          description: Successful operation.
+          description: Withdrawn application
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/Application'
-        default:
-          $ref: '#/components/responses/Error'
-        '401':
-          description: A required session is missing or invalid (when applicable to token verification).
-            Error body is unspecified.
-        '403':
-          description: Permission, ownership, or CSRF validation failed. Error body is unspecified.
+              schema: { $ref: '#/components/schemas/Application' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /employer/dashboard/:
     get:
-      operationId: getEmployerDashboard
-      summary: Get employer dashboard counts and recent applications
-      tags:
-      - employer
-      description: Requires an authenticated company user and membership of the company owning the jobs/applications.
+      tags: [Employer]
+      summary: Get the employer dashboard summary
+      security: [{ bearerAuth: [] }]
       responses:
         '200':
-          description: Successful operation.
+          description: Dashboard summary
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/EmployerDashboard'
-        default:
-          $ref: '#/components/responses/Error'
-        '401':
-          description: A required session is missing or invalid (when applicable to token verification).
-            Error body is unspecified.
-        '403':
-          description: Permission, ownership, or CSRF validation failed. Error body is unspecified.
+              schema: { $ref: '#/components/schemas/EmployerDashboard' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /employer/jobs/:
     get:
-      operationId: listCompanyJobs
-      summary: List the company jobs
-      tags:
-      - employer
-      description: Requires an authenticated company user and membership of the company owning the jobs/applications.
+      tags: [Employer, Jobs]
+      summary: List jobs owned by the employer's company
+      security: [{ bearerAuth: [] }]
       responses:
         '200':
-          description: Successful operation.
+          description: Company jobs
           content:
             application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Job'
-        default:
-          $ref: '#/components/responses/Error'
-        '401':
-          description: A required session is missing or invalid (when applicable to token verification).
-            Error body is unspecified.
-        '403':
-          description: Permission, ownership, or CSRF validation failed. Error body is unspecified.
+              schema: { type: array, items: { $ref: '#/components/schemas/Job' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
     post:
-      operationId: createJob
+      tags: [Employer, Jobs]
       summary: Create a company job
-      tags:
-      - employer
-      description: Requires an authenticated company user and membership of the company owning the jobs/applications.
+      security: [{ bearerAuth: [] }]
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              $ref: '#/components/schemas/JobInput'
+            schema: { $ref: '#/components/schemas/JobInput' }
       responses:
         '201':
-          description: Successful operation.
+          description: Created job
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/Job'
-        default:
-          $ref: '#/components/responses/Error'
-        '401':
-          description: A required session is missing or invalid (when applicable to token verification).
-            Error body is unspecified.
-        '403':
-          description: Permission, ownership, or CSRF validation failed. Error body is unspecified.
-  /employer/jobs/{id}/:
+              schema: { $ref: '#/components/schemas/Job' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /employer/jobs/{jobId}/:
     patch:
-      operationId: updateJob
-      summary: Partially update an owned job
-      tags:
-      - employer
-      description: Requires an authenticated company user and membership of the company owning the jobs/applications.
+      tags: [Employer, Jobs]
+      summary: Partially update a company job
+      security: [{ bearerAuth: [] }]
       parameters:
-      - $ref: '#/components/parameters/Id'
+        - { $ref: '#/components/parameters/jobId' }
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              $ref: '#/components/schemas/JobInput'
+            schema: { $ref: '#/components/schemas/JobInput' }
       responses:
         '200':
-          description: Successful operation.
+          description: Updated job
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/Job'
-        default:
-          $ref: '#/components/responses/Error'
-        '401':
-          description: A required session is missing or invalid (when applicable to token verification).
-            Error body is unspecified.
-        '403':
-          description: Permission, ownership, or CSRF validation failed. Error body is unspecified.
-  /employer/jobs/{id}/status/:
+              schema: { $ref: '#/components/schemas/Job' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /employer/jobs/{jobId}/status/:
     post:
-      operationId: setJobStatus
-      summary: Change an owned job status
-      tags:
-      - employer
-      description: Requires an authenticated company user and membership of the company owning the jobs/applications.
+      tags: [Employer, Jobs]
+      summary: Change a job's status
+      security: [{ bearerAuth: [] }]
       parameters:
-      - $ref: '#/components/parameters/Id'
+        - { $ref: '#/components/parameters/jobId' }
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/JobStatusInput'
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [Draft, Published, Closed, Expired] }
       responses:
         '200':
-          description: Successful operation.
+          description: Updated job
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/Job'
-        default:
-          $ref: '#/components/responses/Error'
-        '401':
-          description: A required session is missing or invalid (when applicable to token verification).
-            Error body is unspecified.
-        '403':
-          description: Permission, ownership, or CSRF validation failed. Error body is unspecified.
-  /employer/jobs/{id}/applications/:
+              schema: { $ref: '#/components/schemas/Job' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /employer/jobs/{jobId}/applications/:
     get:
-      operationId: listApplicants
-      summary: List applications for an owned job
-      tags:
-      - employer
-      description: Requires an authenticated company user and membership of the company owning the jobs/applications.
+      tags: [Employer, Applications]
+      summary: List applicants to a company job
+      security: [{ bearerAuth: [] }]
       parameters:
-      - $ref: '#/components/parameters/Id'
+        - { $ref: '#/components/parameters/jobId' }
       responses:
         '200':
-          description: Successful operation.
+          description: Applications for the job
           content:
             application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Application'
-        default:
-          $ref: '#/components/responses/Error'
-        '401':
-          description: A required session is missing or invalid (when applicable to token verification).
-            Error body is unspecified.
-        '403':
-          description: Permission, ownership, or CSRF validation failed. Error body is unspecified.
-  /employer/applications/{id}/status/:
+              schema: { type: array, items: { $ref: '#/components/schemas/Application' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /employer/applications/{applicationId}/status/:
     post:
-      operationId: updateApplicationStatus
-      summary: Change an application status
-      tags:
-      - employer
-      description: Requires an authenticated company user and membership of the company owning the jobs/applications.
+      tags: [Employer, Applications]
+      summary: Change an applicant's status
+      security: [{ bearerAuth: [] }]
       parameters:
-      - $ref: '#/components/parameters/Id'
+        - { name: applicationId, in: path, required: true, schema: { type: string } }
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ApplicationStatusInput'
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [Applied, Under Review, Shortlisted, Rejected, Hired] }
       responses:
         '200':
-          description: Successful operation.
+          description: Updated application
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/Application'
-        default:
-          $ref: '#/components/responses/Error'
-        '401':
-          description: A required session is missing or invalid (when applicable to token verification).
-            Error body is unspecified.
-        '403':
-          description: Permission, ownership, or CSRF validation failed. Error body is unspecified.
+              schema: { $ref: '#/components/schemas/Application' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /notifications/:
     get:
-      operationId: listNotifications
-      summary: List the current user notifications
-      tags:
-      - notifications
-      description: Requires an authenticated session.
+      tags: [Notifications]
+      summary: List notifications for the current user
+      security: [{ bearerAuth: [] }]
       responses:
         '200':
-          description: Successful operation.
+          description: Notifications
           content:
             application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Notification'
-        default:
-          $ref: '#/components/responses/Error'
-        '401':
-          description: A required session is missing or invalid (when applicable to token verification).
-            Error body is unspecified.
-        '403':
-          description: Permission, ownership, or CSRF validation failed. Error body is unspecified.
-  /notifications/{id}/read/:
+              schema: { type: array, items: { $ref: '#/components/schemas/Notification' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /notifications/{notificationId}/read/:
     post:
-      operationId: markNotificationRead
-      summary: Mark an owned notification read
-      tags:
-      - notifications
-      description: Requires an authenticated session. Sends no request body.
+      tags: [Notifications]
+      summary: Mark a notification as read
+      security: [{ bearerAuth: [] }]
       parameters:
-      - $ref: '#/components/parameters/Id'
+        - { name: notificationId, in: path, required: true, schema: { type: string } }
       responses:
-        '204':
-          description: Successful operation; no response body.
-        default:
-          $ref: '#/components/responses/Error'
-        '401':
-          description: A required session is missing or invalid (when applicable to token verification).
-            Error body is unspecified.
-        '403':
-          description: Permission, ownership, or CSRF validation failed. Error body is unspecified.
+        '204': { description: Notification marked read; response body is empty }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
 components:
   securitySchemes:
-    sessionAuth:
-      type: apiKey
-      in: cookie
-      name: sessionid
-      description: 'Session cookie sent by fetch credentials: include. Cookie name is assumed; the frontend
-        does not inspect it.'
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: token
+  parameters:
+    jobId:
+      name: jobId
+      in: path
+      required: true
+      schema: { type: string }
+  responses:
+    BadRequest:
+      description: Invalid request body or query parameter
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: Missing, invalid, or expired authentication
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: Authenticated user lacks the required role or ownership
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: Request conflicts with an existing application
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
   schemas:
-    UserRole:
-      type: string
-      enum:
-      - candidate
-      - company
-      - admin
-    AccountRole:
-      type: string
-      enum:
-      - candidate
-      - company
-    JobStatus:
-      type: string
-      enum:
-      - Draft
-      - Published
-      - Closed
-      - Expired
-    ApplicationStatus:
-      type: string
-      enum:
-      - Applied
-      - Under Review
-      - Shortlisted
-      - Rejected
-      - Hired
-      - Withdrawn
-      - External click
-    RemotePolicy:
-      type: string
-      enum:
-      - Remote
-      - Hybrid
-      - On-site
-    JobType:
-      type: string
-      enum:
-      - Full-time
-      - Part-time
-      - Contract
-      - Internship
-    ExperienceLevel:
-      type: string
-      enum:
-      - Entry
-      - Mid
-      - Senior
-      - Lead
-    Job:
+    Error:
       type: object
+      required: [detail]
       properties:
-        id: &id001
-          type: string
-        companyId: &id002
-          type: string
-        title: &id003
-          type: string
-        description: &id004
-          type: string
-        location: &id005
-          type: string
-        currency: &id006
-          type: string
-        externalApplyUrl: &id007
-          type: string
-        postedAt: &id008
-          type: string
-        deadline: &id009
-          type: string
-        salaryMin: &id010
-          type: number
-        salaryMax: &id011
-          type: number
-        skills: &id012
-          type: array
-          items:
-            type: string
-        responsibilities: &id013
-          type: array
-          items:
-            type: string
-        qualifications: &id014
-          type: array
-          items:
-            type: string
-        benefits: &id015
-          type: array
-          items:
-            type: string
-        remotePolicy: &id016
-          $ref: '#/components/schemas/RemotePolicy'
-        jobType: &id017
-          $ref: '#/components/schemas/JobType'
-        experienceLevel: &id018
-          $ref: '#/components/schemas/ExperienceLevel'
-        status: &id019
-          $ref: '#/components/schemas/JobStatus'
-        applicationMethod: &id020
-          type: string
-          enum:
-          - Internal
-          - External
-        applicationCount: &id021
-          type: number
-      required:
-      - id
-      - companyId
-      - title
-      - description
-      - location
-      - currency
-      - postedAt
-      - deadline
-      - salaryMin
-      - salaryMax
-      - skills
-      - responsibilities
-      - qualifications
-      - benefits
-      - remotePolicy
-      - jobType
-      - experienceLevel
-      - status
-      - applicationMethod
-      - applicationCount
-    JobInput:
-      type: object
-      properties:
-        id: *id001
-        companyId: *id002
-        title: *id003
-        description: *id004
-        location: *id005
-        currency: *id006
-        externalApplyUrl: *id007
-        postedAt: *id008
-        deadline: *id009
-        salaryMin: *id010
-        salaryMax: *id011
-        skills: *id012
-        responsibilities: *id013
-        qualifications: *id014
-        benefits: *id015
-        remotePolicy: *id016
-        jobType: *id017
-        experienceLevel: *id018
-        status: *id019
-        applicationMethod: *id020
-        applicationCount: *id021
-      description: 'Partial<Job>: every property is optional, for both creation and update, as accepted
-        by the HTTP adapter. Server ownership and generated-field validation are backend responsibilities.'
-    Company:
-      type: object
-      properties:
-        id:
-          type: string
-        name:
-          type: string
-        description:
-          type: string
-        website:
-          type: string
-        logo:
-          type: string
-        accent:
-          type: string
-      required:
-      - id
-      - name
-      - description
-      - website
-      - logo
-      - accent
+        detail: { type: string }
     User:
       type: object
+      required: [id, email, role]
       properties:
-        id:
-          type: string
-        name:
-          type: string
-        email:
-          type: string
-        role:
-          $ref: '#/components/schemas/UserRole'
-        emailVerified:
-          type: boolean
-      required:
-      - id
-      - name
-      - email
-      - role
-    AccountRegistration:
-      type: object
-      properties:
-        name:
-          type: string
-        email:
-          type: string
-        password:
-          type: string
-          writeOnly: true
-        role:
-          $ref: '#/components/schemas/AccountRole'
-      required:
-      - name
-      - email
-      - password
-      - role
+        id: { type: string }
+        email: { type: string, format: email }
+        role: { type: string, enum: [candidate, company, admin] }
     LoginInput:
       type: object
+      required: [email, password]
       properties:
-        email:
-          type: string
-        password:
-          type: string
-          writeOnly: true
-      required:
-      - email
-      - password
+        email: { type: string, format: email }
+        password: { type: string, format: password }
+    Job:
+      type: object
+      required: [id, companyId, title, description, location, salaryMin, salaryMax, currency, remotePolicy, jobType, experienceLevel, skills, responsibilities, qualifications, benefits, applicationMethod, status, postedAt, deadline, applicationCount]
+      properties:
+        id: { type: string }
+        companyId: { type: string }
+        title: { type: string }
+        description: { type: string }
+        location: { type: string }
+        salaryMin: { type: number }
+        salaryMax: { type: number }
+        currency: { type: string }
+        remotePolicy: { type: string, enum: [Remote, Hybrid, On-site] }
+        jobType: { type: string, enum: [Full-time, Part-time, Contract, Internship] }
+        experienceLevel: { type: string, enum: [Entry, Mid, Senior, Lead] }
+        skills: { type: array, items: { type: string } }
+        responsibilities: { type: array, items: { type: string } }
+        qualifications: { type: array, items: { type: string } }
+        benefits: { type: array, items: { type: string } }
+        applicationMethod: { type: string, enum: [Internal, External] }
+        externalApplyUrl: { type: string, format: uri }
+        status: { type: string, enum: [Draft, Published, Closed, Expired] }
+        postedAt: { type: string, format: date-time }
+        deadline: { type: string, format: date-time }
+        applicationCount: { type: integer }
+    JobInput:
+      type: object
+      description: All fields are optional for the current create and patch handlers.
+      properties:
+        title: { type: string }
+        description: { type: string }
+        location: { type: string }
+        salaryMin: { type: number }
+        salaryMax: { type: number }
+        currency: { type: string }
+        remotePolicy: { type: string, enum: [Remote, Hybrid, On-site] }
+        jobType: { type: string, enum: [Full-time, Part-time, Contract, Internship] }
+        experienceLevel: { type: string, enum: [Entry, Mid, Senior, Lead] }
+        skills: { type: array, items: { type: string } }
+        responsibilities: { type: array, items: { type: string } }
+        qualifications: { type: array, items: { type: string } }
+        benefits: { type: array, items: { type: string } }
+        applicationMethod: { type: string, enum: [Internal, External] }
+        externalApplyUrl: { type: string, format: uri }
+        deadline: { type: string, format: date-time }
+    Company:
+      type: object
+      required: [id, name, description, website, logo, accent]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        website: { type: string }
+        logo: { type: string }
+        accent: { type: string }
     CandidateProfile:
       type: object
+      required: [userId, headline, location, skills, experience, education, preferences, cvFiles, defaultCvId]
       properties:
-        userId: &id022
-          type: string
-        headline: &id023
-          type: string
-        location: &id024
-          type: string
-        experience: &id025
-          type: string
-        education: &id026
-          type: string
-        preferences: &id027
-          type: string
-        defaultCvId: &id028
-          type: string
-        skills: &id029
-          type: array
-          items:
-            type: string
-        cvFiles: &id030
-          type: array
-          items:
-            type: string
-      required:
-      - userId
-      - headline
-      - location
-      - experience
-      - education
-      - preferences
-      - defaultCvId
-      - skills
-      - cvFiles
-      description: CV entries and defaultCvId are strings (currently filenames). This client does not
-        upload file bytes.
+        userId: { type: string }
+        headline: { type: string }
+        location: { type: string }
+        skills: { type: array, items: { type: string } }
+        experience: { type: string }
+        education: { type: string }
+        preferences: { type: string }
+        cvFiles: { type: array, items: { type: string } }
+        defaultCvId: { type: string }
     CandidateProfilePatch:
       type: object
       properties:
-        userId: *id022
-        headline: *id023
-        location: *id024
-        experience: *id025
-        education: *id026
-        preferences: *id027
-        defaultCvId: *id028
-        skills: *id029
-        cvFiles: *id030
-    Application:
-      type: object
-      properties:
-        id:
-          type: string
-        jobId:
-          type: string
-        candidateId:
-          type: string
-        candidateName:
-          type: string
-        candidateEmail:
-          type: string
-        cvName:
-          type: string
-        coverLetter:
-          type: string
-        createdAt:
-          type: string
-        status:
-          $ref: '#/components/schemas/ApplicationStatus'
-      required:
-      - id
-      - jobId
-      - candidateName
-      - candidateEmail
-      - cvName
-      - coverLetter
-      - createdAt
-      - status
+        userId: { type: string }
+        headline: { type: string }
+        location: { type: string }
+        skills: { type: array, items: { type: string } }
+        experience: { type: string }
+        education: { type: string }
+        preferences: { type: string }
+        cvFiles: { type: array, items: { type: string } }
+        defaultCvId: { type: string }
     ApplicationInput:
       type: object
+      required: [jobId, candidateName, candidateEmail, cvName, coverLetter]
       properties:
-        jobId:
-          type: string
-        candidateName:
-          type: string
-        candidateEmail:
-          type: string
-        cvName:
-          type: string
-        coverLetter:
-          type: string
-      required:
-      - jobId
-      - candidateName
-      - candidateEmail
-      - cvName
-      - coverLetter
-      description: JSON application data; coverLetter may be empty. isGuest is stripped by the client
-        and only selects the endpoint. cvName is a filename/reference, not an upload.
-    Notification:
+        jobId: { type: string }
+        candidateName: { type: string }
+        candidateEmail: { type: string, format: email }
+        cvName: { type: string }
+        coverLetter: { type: string }
+    Application:
       type: object
+      required: [id, jobId, candidateName, candidateEmail, cvName, coverLetter, status, createdAt]
       properties:
-        id:
-          type: string
-        title:
-          type: string
-        body:
-          type: string
-        readAt:
-          type: string
-        createdAt:
-          type: string
-      required:
-      - id
-      - title
-      - body
-      - createdAt
+        id: { type: string }
+        jobId: { type: string }
+        candidateId: { type: string }
+        candidateName: { type: string }
+        candidateEmail: { type: string, format: email }
+        cvName: { type: string }
+        coverLetter: { type: string }
+        status: { type: string, enum: [Applied, Under Review, Shortlisted, Rejected, Hired, Withdrawn, External click] }
+        createdAt: { type: string, format: date-time }
     EmployerDashboard:
       type: object
+      required: [activeJobs, totalJobs, applications, shortlisted, recent]
       properties:
-        activeJobs:
-          type: number
-        totalJobs:
-          type: number
-        applications:
-          type: number
-        shortlisted:
-          type: number
-        recent:
-          type: array
-          items:
-            $ref: '#/components/schemas/Application'
-      required:
-      - activeJobs
-      - totalJobs
-      - applications
-      - shortlisted
-      - recent
-    SaveJobInput:
+        activeJobs: { type: integer }
+        totalJobs: { type: integer }
+        applications: { type: integer }
+        shortlisted: { type: integer }
+        recent: { type: array, items: { $ref: '#/components/schemas/Application' } }
+    Notification:
       type: object
+      required: [id, title, body, createdAt]
       properties:
-        jobId:
-          type: string
-      required:
-      - jobId
-    VerifyEmailInput:
-      type: object
-      properties:
-        token:
-          type: string
-    PasswordResetInput:
-      type: object
-      properties:
-        email:
-          type: string
-      required:
-      - email
-    DemoRoleInput:
-      type: object
-      properties:
-        role:
-          $ref: '#/components/schemas/AccountRole'
-      required:
-      - role
-    JobStatusInput:
-      type: object
-      properties:
-        status:
-          $ref: '#/components/schemas/JobStatus'
-      required:
-      - status
-    ApplicationStatusInput:
-      type: object
-      properties:
-        status:
-          $ref: '#/components/schemas/ApplicationStatus'
-      required:
-      - status
-  parameters:
-    Id:
-      name: id
-      in: path
-      required: true
-      description: Resource identifier; saved-jobs uses the job ID, not a saved-record ID.
-      schema:
-        type: string
-  responses:
-    Error:
-      description: Non-2xx failure. The frontend throws Request failed (<status>) and does not read the
-        response body; no error payload schema is assumed.
+        id: { type: string }
+        title: { type: string }
+        body: { type: string }
+        readAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
