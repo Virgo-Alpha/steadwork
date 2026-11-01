@@ -25,9 +25,15 @@ def authenticate(email: str, password: str) -> User | None:
 
 
 def issue_token(user: User, lifetime: timedelta | None = None) -> str:
+    now = timezone.now()
+    _tokens_copy = {
+        token: session for token, session in _tokens.items() if session.expires_at > now
+    }
+    _tokens.clear()
+    _tokens.update(_tokens_copy)
     token = secrets.token_urlsafe(32)
     _tokens[token] = TokenSession(
-        user.id, timezone.now() + (lifetime or timedelta(seconds=getattr(settings, "TOKEN_LIFETIME_SECONDS", 3600)))
+        user.id, now + (lifetime or timedelta(seconds=getattr(settings, "TOKEN_LIFETIME_SECONDS", 3600)))
     )
     return token
 

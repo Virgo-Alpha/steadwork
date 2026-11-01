@@ -4,7 +4,7 @@ import pytest
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from api.auth import authenticate, issue_token, validate_token
+from api.auth import _tokens, authenticate, issue_token, validate_token
 from api.store import get_store, reset_store
 
 
@@ -50,6 +50,15 @@ def test_tokens_are_opaque_and_expire():
     assert "." not in token
     assert validate_token(token).id == user.id
     assert validate_token(token, now=timezone.now() + timedelta(seconds=31)) is None
+
+
+def test_issuing_token_prunes_expired_sessions():
+    user = authenticate("candidate@example.com", "candidate-password")
+    expired = issue_token(user, lifetime=timedelta(seconds=-1))
+    assert expired in _tokens
+    fresh = issue_token(user)
+    assert expired not in _tokens
+    assert fresh in _tokens
 
 
 def test_login_and_protected_route_authorization():
