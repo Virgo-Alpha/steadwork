@@ -52,5 +52,6 @@ def current_user(request) -> User | None:
         return None
     return validate_token(parts[1])
 
-def current_user(request):
-    return getattr(request, "user", None) if getattr(request, "user", None) else None
+
+def revoke_all_tokens() -> None:
+    _tokens.clear()

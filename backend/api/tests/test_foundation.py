@@ -36,6 +36,14 @@ def test_store_reset_does_not_leak_mutations():
     assert get_store().users[0].role == "candidate"
 
 
+def test_reset_store_invalidates_existing_tokens():
+    user = authenticate("candidate@example.com", "candidate-password")
+    token = issue_token(user)
+    assert validate_token(token) is not None
+    reset_store()
+    assert validate_token(token) is None
+
+
 def test_tokens_are_opaque_and_expire():
     user = authenticate("candidate@example.com", "candidate-password")
     token = issue_token(user, lifetime=timedelta(seconds=30))
@@ -52,6 +60,8 @@ def test_login_and_protected_route_authorization():
     assert response.status_code == 200
     assert response.json()["token_type"] == "Bearer"
     assert "password" not in response.json()
+    client.credentials(HTTP_AUTHORIZATION=f"Bearer {response.json()['access_token']}")
+    assert client.get("/api/protected/candidate/").status_code == 200
 
 
 def test_invalid_token_and_role_ownership_are_rejected():

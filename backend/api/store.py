@@ -39,6 +39,9 @@ def get_store() -> InMemoryStore:
 def reset_store() -> None:
     global _store
     _store = _seed()
+    from .auth import revoke_all_tokens
+
+    revoke_all_tokens()
 
 def application_status() -> str:
     """Report the dependency-free store used by the bootstrap service."""
