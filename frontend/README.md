@@ -1,6 +1,6 @@
 # Steadwork Tech Job Board
 
-Standalone React/Vite frontend with an included mock service. Candidate, guest, and employer flows work without a backend. This folder uses npm and does not depend on the root Replit pnpm workspace.
+Standalone React/Vite frontend with an included mock service. API mode is the default for normal development; use `VITE_DATA_MODE=mock` for isolated frontend work. This folder uses npm and does not depend on the root Replit pnpm workspace.
 
 ## Copy into your project
 
@@ -24,9 +24,9 @@ npm run build
 ## Service layer
 
 - `src/services/job-board-service.ts` defines the interface used by the UI.
-- `src/services/mock-job-board-service.ts` is the default implementation and persists demo data in browser storage.
-- `src/services/http-job-board-service.ts` is the typed HTTP adapter for a future API.
+- `src/services/mock-job-board-service.ts` is the opt-in mock implementation and persists demo data in browser storage.
+- `src/services/http-job-board-service.ts` is the default typed HTTP adapter.
 - `src/services/index.ts` selects the implementation.
 - `backend-plan.md` records the proposed API contract and the backend-stack choice to resolve.
 
-The mock does not store passwords, send verification or reset emails, or upload CV contents. The HTTP adapter is not connected to a running backend. Set `VITE_DATA_MODE=api` only when the matching API endpoints are available.
+The mock does not store passwords, send verification or reset emails, or upload CV contents. Vite proxies `/api` to `http://localhost:8000` by default (override with `API_PROXY_TARGET`). Set `VITE_DATA_MODE=mock` to use mock data; API failures never fall back to mock data.

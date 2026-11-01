@@ -102,6 +102,14 @@ def login(request):
 
 
 @api_view(["GET"])
+def me(request):
+    user = current_user(request)
+    if not user:
+        return Response({"detail": "Authentication credentials were not provided."}, status=status.HTTP_401_UNAUTHORIZED)
+    return Response(user.to_dict())
+
+
+@api_view(["GET"])
 def list_jobs(request):
     jobs, error = _public_jobs(request)
     return error or Response([job.to_dict() for job in jobs])
