@@ -689,23 +689,26 @@ Goal: Specify persistence, lifecycle, authorization, and proposed API contracts 
 - Do not imply currently incomplete APIs, CV binary storage, email delivery, invitations, external click tracking, or moderation are implemented.
 
 ## 24. Define requirements for collaborative interview sessions and canvas
-Status: backlog
+Status: ready (product owner decision requested)
 Issue: https://github.com/Virgo-Alpha/steadwork/issues/24
-Goal: Decide whether Steadwork should support interviewer and candidate interview sessions with a shared canvas, and define the product and technical contract before implementation.
+Goal: Record the product owner’s decision on whether Steadwork should support collaborative interviewer–candidate sessions with a shared canvas. If included, define and document a complete product and technical contract before creating implementation work.
 
 ## Acceptance criteria
 
-- [ ] Product scope states whether collaborative interview sessions and a shared canvas belong in Steadwork.
-- [ ] If in scope, requirements identify interviewer and candidate roles, session creation, invitation/join behavior, session ownership, and access after a link is shared.
-- [ ] Requirements define session lifecycle, link expiry/revocation, authentication and authorization, and behavior when a participant disconnects or a session ends.
-- [ ] Requirements define which canvas changes participants can make, how other participants observe them, and whether session/canvas state persists or is discarded.
-- [ ] Privacy, data retention, cleanup, invalid/unauthorized actions, and relevant accessibility expectations are documented.
-- [ ] The approved decisions and unresolved choices are recorded in the product/backend specifications; implementation work is split into issues with acceptance criteria and dependencies if the feature is approved.
-- [ ] This task changes no application code, API implementation, database schema, or runtime infrastructure.
+- [ ] The product owner selects exactly one outcome: include this capability, exclude it, or defer the decision. Record the outcome, rationale, decision owner and date in `_docs/specs.md` and `_docs/backend-plan.md`.
+- [ ] If included, define who may create a session, the interviewer and candidate roles, how a candidate is invited or joins, session ownership/transfer, and what happens when a link is forwarded or shared.
+- [ ] If included, define the session states and transitions, start/end/cancel behavior, link expiration/revocation, required authentication, per-action authorization, and invalid/unauthorized response behavior.
+- [ ] If included, define disconnect, reconnect and concurrent participation behavior, including how participants see canvas updates and resolve conflicting changes; do not assume a real-time transport before it is selected in the contract.
+- [ ] If included, define allowed canvas content/actions, whether canvas/session state persists, who can access it after the interview, and deletion/retention behavior. Identify dependencies on the retention decision in #28 and create/update a linked decision issue if needed.
+- [ ] If included, document privacy and data exposure risks, cleanup expectations, accessibility expectations for keyboard and assistive technology use, and any unresolved choices with owners and resolution paths.
+- [ ] If included, update product/backend specifications and create separate implementation issue(s) only after scope, access, lifecycle and persistence decisions are sufficiently concrete. Each issue links to the approved contract and records dependencies and checkable acceptance criteria.
+- [ ] If excluded, record the rationale and explicitly state in product/backend specifications that collaborative sessions and the shared canvas are outside Steadwork scope; do not create implementation work.
+- [ ] If deferred, record the decision owner and a concrete review trigger or date, keep the feature and implementation contract explicitly unresolved, and create no implementation work until that trigger is met.
+- [ ] This task changes no application code, API implementation, database schema, dependencies or runtime infrastructure; the current job-board API and schema remain unchanged.
 
 ## Out of scope
 
-- Implementing interview sessions or a shared canvas; that work will be specified and split into implementation issues here if approved.
+- Implementing interview sessions or a shared canvas; if included, that work is split into implementation issues after this decision and contract are complete.
 - Job-board Playwright coverage, covered by [#19](https://github.com/Virgo-Alpha/steadwork/issues/19).
 
 ## Constraints
@@ -715,30 +718,33 @@ Goal: Decide whether Steadwork should support interviewer and candidate intervie
 - Keep the job-board MVP API and schema unchanged.
 
 ## 25. Plan and implement production deployment and release publishing
-Status: backlog
+Status: ready (hosting target decision pending)
 Issue: https://github.com/Virgo-Alpha/steadwork/issues/25
-Goal: Decide and implement a production deployment and release path for Steadwork after the CI workflow is stable.
+Goal: Implement a gated, reviewable deployment and release path for an explicitly approved hosting target, with verification and recovery procedures. The path must be testable without changing production or publishing a live release.
 
 ## Acceptance criteria
 
-- [ ] The approved hosting target and environment strategy (development/production) are recorded.
-- [ ] Deployment credentials and permissions are documented and handled without committing secrets; AWS deployments use GitHub OIDC if selected.
-- [ ] Infrastructure is defined in Terraform where practical, or the reason for another approach is documented.
-- [ ] The workflow builds and publishes a release artifact and deploys only from an approved branch/tag and environment.
-- [ ] Deployment verifies the service through `/api/health/` and reports health failure clearly.
-- [ ] A rollback or recovery procedure is documented and verified for a failed deployment.
-- [ ] The deployment can be exercised without publishing a release to production during pull-request checks.
+- [ ] Before implementation, the product owner selects a hosting target and records the decision, rationale, deployment region, public endpoint/domain plan, and development/staging/production environment strategy. No paid service is provisioned before this decision.
+- [ ] The deployment design documents required credentials and permissions, uses least privilege, keeps secret values out of Git and logs, and limits deployment credentials to protected environments. AWS uses GitHub OIDC rather than long-lived AWS access keys if AWS is selected.
+- [ ] Infrastructure is defined in Terraform where practical; any resource that cannot reasonably be managed with Terraform has a documented reason and recovery procedure.
+- [ ] A versioned, immutable release artifact records its source commit and version/digest. Publishing and deployment are restricted to approved release tags/branches and a protected environment with explicit approval; pull requests and fork code cannot access production secrets or deploy.
+- [ ] Deployment runs a health check against `/api/health/`, reports failure clearly, and does not mark a rollout successful unless the service is healthy.
+- [ ] A rollback/recovery procedure covers an unhealthy rollout and database migration failure, identifies the prior artifact and data recovery limits, and is verified using a non-production simulation or test harness.
+- [ ] Pull-request validation can check the deployment configuration and build the artifact without publishing a release, applying infrastructure, or changing any remote environment.
+- [ ] The deployment workflow is not executed against production and no live release is published as part of this task; its trigger and environment gates are documented for a separately approved release action.
 
 ## Out of scope
 
 - The GitHub Actions CI workflow and non-executing deployment plan comment, covered by [#21](https://github.com/Virgo-Alpha/steadwork/issues/21).
 - The full contributor and operations guide, covered by [#22](https://github.com/Virgo-Alpha/steadwork/issues/22).
+- Observability and on-call automation remain documented future work in [#21](https://github.com/Virgo-Alpha/steadwork/issues/21); this issue adds no monitoring/alerting stack.
 
 ## Constraints
 
-- Use an explicitly selected hosting target; Render and Vercel remain alternatives to AWS until a decision is recorded.
+- Do not implement or exercise a deployment until the product owner has selected and recorded the hosting target.
 - Keep production credentials out of the repository and workflow logs.
 - Do not deploy from untrusted pull-request code.
+- Do not deploy, publish releases, or activate commented deployment code as part of this task.
 - Add observability and on-call automation only through separately groomed work.
 
 ## 26. Decide CV file storage, access, and retention
