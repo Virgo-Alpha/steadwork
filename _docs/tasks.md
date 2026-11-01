@@ -572,34 +572,43 @@ Goal: From the repository root, contributors can run the frontend, backend, fron
 - Keep test documentation focused on test invocation; leave the full contributor README work for #22.
 
 ## 21. Set up continuous integration checks
-Goal: GitHub Actions automatically runs parallel checks, Compose-backed integration/E2E tests, and a documented future deployment path.
-Description: Add a GitHub Actions CI/CD workflow that runs frontend and backend tests in parallel, builds the two-service Docker Compose stack, runs integration tests and `make e2e` against it, and fails clearly on errors. Include deployment only as a commented block: document AWS deployment with a GitHub OIDC role, note Render and Vercel as alternatives, and include the requested future validation and operations notes without implementing deployment.
+Status: merged (review approved; QA PASS; post-merge full validation passed)
+Issue: https://github.com/Virgo-Alpha/steadwork/issues/21
+Worktree: `/tmp/steadwork-issue-21` (`issue-21-github-actions`)
+Engineer: `/root/engineer_21`
+Owned files: GitHub Actions workflow and CI-specific minimal docs/configuration only; no application/runtime/deployment changes
+Commit: `4852507` (`ci: add GitHub Actions validation workflow`)
+Review worktree: `/tmp/steadwork-review-21` (`review-21-github-actions`; approved)
+QA worktree: `/tmp/steadwork-qa-21` (`qa-21-github-actions`; PASS)
+Merge commit: `94c93e7` (`Merge issue #21 GitHub Actions workflow`)
+Goal: Run the repository's unit, integration, and Compose-backed browser checks on pull requests and the default branch, with failures visible in GitHub Actions. Record a non-executing deployment plan for future work.
 
 ## Acceptance criteria
 
-- [ ] Pull requests and the default branch trigger a GitHub Actions workflow.
-- [ ] CI installs frontend and backend dependencies using the repository-standard tools.
-- [ ] Frontend and backend unit/test jobs run in parallel.
-- [ ] CI builds the two-service Docker Compose stack and waits for readiness.
-- [ ] CI runs integration tests and `make e2e` against that Compose stack.
-- [ ] CI runs formatting/lint checks and the unified test command from #20.
-- [ ] Any failed check fails the workflow with readable logs.
-- [ ] Dependency caching is scoped safely and does not cache secrets or generated databases.
-- [ ] The README documents the local equivalent of the CI checks.
-- [ ] The deployment step is commented out and not executable; its comment specifies AWS with a GitHub OIDC role, considers Render and Vercel, and says deployment success should later be checked through the health endpoint.
-- [ ] The deployment comment says to use Terraform where possible, start with one unified CI workflow and later separate dev/prod branches, and add future OTel, Prometheus, Grafana, alerting and an on-call engineer agent.
+- [x] A GitHub Actions workflow runs for pull requests and pushes to the repository's default branch.
+- [x] Frontend and backend test jobs run in parallel, install dependencies with npm and uv, and use the same Vitest and pytest suites as the local commands.
+- [x] A full validation job runs the root `make test` command from [#20](https://github.com/Virgo-Alpha/steadwork/issues/20), including frontend/backend integration coverage and the Playwright E2E harness.
+- [x] The E2E job builds and starts exactly the existing `postgres` and `app` services, waits for their health checks, and runs Playwright without querying the database directly.
+- [x] The workflow runs the configured frontend typecheck/production build and a whitespace/diff check; it does not claim or require an unconfigured linter.
+- [x] Any failed job or test stage returns a failed workflow with readable logs and its failing stage identified.
+- [x] Dependency caches are keyed by the relevant lockfiles and do not include secrets, generated databases, or test Compose volumes.
+- [x] A contributor can find the local equivalent commands and required E2E environment variables in the README or linked test instructions.
+- [x] Any deployment plan in the workflow is inside comments only and cannot execute; it names AWS with GitHub OIDC as the preferred option, Render and Vercel as alternatives, and verifies future deployments through `/api/health/`.
+- [x] The deployment comment also records Terraform where practical, one unified CI workflow before later dev/prod separation, and future OTel, Prometheus, Grafana, alerting, and an on-call engineer agent.
 
 ## Out of scope
 
-- New application behavior or tests, covered by #19 and #20.
-- Production deployment and release publishing.
+- Actual production deployment and release publishing are tracked in [#25](https://github.com/Virgo-Alpha/steadwork/issues/25).
+- New application test cases and the E2E harness are covered by [#19](https://github.com/Virgo-Alpha/steadwork/issues/19).
+- The unified local test command is covered by [#20](https://github.com/Virgo-Alpha/steadwork/issues/20).
+- The full contributor README rewrite is covered by [#22](https://github.com/Virgo-Alpha/steadwork/issues/22).
 
 ## Constraints
 
 - Use GitHub Actions; do not add GitLab CI for this task.
 - Pin or constrain action/runtime versions consistently.
-- Keep credentials out of workflow files and logs.
-- Do not implement or trigger deployment in this task.
+- Keep credentials out of workflow files and logs; do not grant deployment permissions to pull-request jobs.
+- Do not deploy, publish releases, or activate any commented deployment code.
 - Keep observability and on-call automation as documented future work only.
 
 ## 22. Update the project README
@@ -679,3 +688,30 @@ Goal: Decide whether Steadwork should support interviewer and candidate intervie
 - Use existing product and backend specifications as source material.
 - Do not assume a real-time transport, persistence policy, or security model before the product decisions are recorded.
 - Keep the job-board MVP API and schema unchanged.
+
+## 25. Plan and implement production deployment and release publishing
+Status: backlog
+Issue: https://github.com/Virgo-Alpha/steadwork/issues/25
+Goal: Decide and implement a production deployment and release path for Steadwork after the CI workflow is stable.
+
+## Acceptance criteria
+
+- [ ] The approved hosting target and environment strategy (development/production) are recorded.
+- [ ] Deployment credentials and permissions are documented and handled without committing secrets; AWS deployments use GitHub OIDC if selected.
+- [ ] Infrastructure is defined in Terraform where practical, or the reason for another approach is documented.
+- [ ] The workflow builds and publishes a release artifact and deploys only from an approved branch/tag and environment.
+- [ ] Deployment verifies the service through `/api/health/` and reports health failure clearly.
+- [ ] A rollback or recovery procedure is documented and verified for a failed deployment.
+- [ ] The deployment can be exercised without publishing a release to production during pull-request checks.
+
+## Out of scope
+
+- The GitHub Actions CI workflow and non-executing deployment plan comment, covered by [#21](https://github.com/Virgo-Alpha/steadwork/issues/21).
+- The full contributor and operations guide, covered by [#22](https://github.com/Virgo-Alpha/steadwork/issues/22).
+
+## Constraints
+
+- Use an explicitly selected hosting target; Render and Vercel remain alternatives to AWS until a decision is recorded.
+- Keep production credentials out of the repository and workflow logs.
+- Do not deploy from untrusted pull-request code.
+- Add observability and on-call automation only through separately groomed work.
