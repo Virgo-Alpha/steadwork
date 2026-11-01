@@ -1,10 +1,11 @@
+import os
 from pathlib import Path
 from api.database import get_database_url, get_store_backend
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = "development-only-not-for-production"
 DEBUG = True
-ALLOWED_HOSTS: list[str] = []
+ALLOWED_HOSTS = [host.strip() for host in os.environ.get("DJANGO_ALLOWED_HOSTS", "").split(",") if host.strip()]
 
 ROOT_URLCONF = "steadwork.urls"
 WSGI_APPLICATION = "steadwork.wsgi.application"

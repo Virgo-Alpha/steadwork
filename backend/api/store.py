@@ -96,4 +96,4 @@ def reset_store() -> None:
 def application_status() -> str:
     """Report which persistence backend serves the current request."""
     from django.conf import settings
-    return "in-memory" if settings.STORE_BACKEND == "inmemory" else "sqlite"
+    return {"inmemory": "in-memory", "postgresql": "postgresql", "sqlite": "sqlite"}[settings.STORE_BACKEND]

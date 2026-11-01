@@ -8,7 +8,7 @@ class ApiConfig(AppConfig):
     def ready(self):
         from django.conf import settings
 
-        if settings.STORE_BACKEND != "sqlite":
+        if settings.STORE_BACKEND == "inmemory":
             return
 
         # Fail during Django startup when migrations have not been applied.
