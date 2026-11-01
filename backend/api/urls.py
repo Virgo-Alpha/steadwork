@@ -5,6 +5,8 @@ from .routers import (
     create_application, create_guest_application, get_company, get_job, health,
     list_companies, list_jobs, login, recruiter_probe, saved_jobs,
     unsave_job, withdraw_application,
+    employer_dashboard, employer_jobs, employer_job, employer_job_status,
+    employer_applications, employer_application_status, notifications, notification_read,
 )
 
 urlpatterns = [
@@ -27,4 +29,12 @@ urlpatterns = [
     path("applications/", create_application, name="create-application"),
     path("applications/guest/", create_guest_application, name="create-guest-application"),
     path("applications/<str:application_id>/withdraw/", withdraw_application, name="withdraw-application"),
+    path("employer/dashboard/", employer_dashboard, name="employer-dashboard"),
+    path("employer/jobs/", employer_jobs, name="employer-jobs"),
+    path("employer/jobs/<str:job_id>/", employer_job, name="employer-job"),
+    path("employer/jobs/<str:job_id>/status/", employer_job_status, name="employer-job-status"),
+    path("employer/jobs/<str:job_id>/applications/", employer_applications, name="employer-applications"),
+    path("employer/applications/<str:application_id>/status/", employer_application_status, name="employer-application-status"),
+    path("notifications/", notifications, name="notifications"),
+    path("notifications/<str:notification_id>/read/", notification_read, name="notification-read"),
 ]
