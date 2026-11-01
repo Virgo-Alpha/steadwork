@@ -95,7 +95,7 @@ function JobCard({ job, saved = false, onSave }: { job: Job; saved?: boolean; on
         <Link href={`/jobs/${job.id}`} data-testid={`link-job-${job.id}`} style={{ fontFamily: 'var(--app-font-serif)', fontWeight: 800, fontSize: 17, letterSpacing: '-.025em' }}>{job.title}</Link>
         <span className="tag">{job.remotePolicy}</span>
       </div>
-      <div style={{ color: 'hsl(var(--muted-foreground))', fontSize: 12, marginTop: 5 }}>{company.data?.name || 'Loading company'} <span style={{ margin: '0 5px' }}>·</span> {job.location} <span style={{ margin: '0 5px' }}>·</span> {job.jobType}</div>
+      <div style={{ color: 'hsl(var(--muted-foreground))', fontSize: 12, marginTop: 5 }}>{company.error ? <span role="alert">{company.error}</span> : company.data?.name || 'Loading company'} <span style={{ margin: '0 5px' }}>·</span> {job.location} <span style={{ margin: '0 5px' }}>·</span> {job.jobType}</div>
       <div style={{ color: 'hsl(var(--foreground))', fontSize: 12, fontWeight: 700, marginTop: 11 }}>{formatSalary(job)} <span style={{ color: 'hsl(var(--muted-foreground))', fontWeight: 500 }}>· {job.experienceLevel} level</span></div>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 12 }}>{job.skills.slice(0,4).map(skill => <span key={skill} className="tag">{skill}</span>)}</div>
     </div>
@@ -112,7 +112,7 @@ function HomePage() {
   const [savedIds, setSavedIds] = useState<string[]>([]);
   const [error, setError] = useState('');
   const { data: jobs, loading, reload } = useLoad(() => service.listJobs(form), [JSON.stringify(form)]);
-  const { data: saved } = useLoad(() => service.listSavedJobs());
+  const { data: saved, error: savedError, reload: reloadSaved } = useLoad(() => service.listSavedJobs());
   const { data: recommended } = useLoad(() => service.recommendJobs());
   const { data: companies } = useLoad(() => service.listCompanies());
   useEffect(() => setSavedIds(saved?.map(x => x.id) || []), [saved]);
@@ -136,6 +136,7 @@ function HomePage() {
       <div>
         <PageTitle kicker="The shortlist" title="Roles worth a closer look" subtitle={`${jobs?.length ?? 0} open positions from teams building with care.`} side={<label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, color: 'hsl(var(--muted-foreground))' }}><ArrowDownUp size={15}/><select aria-label="Sort jobs" data-testid="select-sort" className="field" style={{ width: 145, minHeight: 36, padding: '6px 8px' }} value={form.sort || 'recent'} onChange={e => change('sort', e.target.value)}><option value="recent">Most recent</option><option value="salary">Salary: high first</option></select></label>}/>
         {error && <ErrorState message={error} retry={() => setError('')}/>}
+        {savedError && <ErrorState message={savedError} retry={reloadSaved}/>}
         {loading ? <JobSkeleton/> : jobs?.length ? <div style={{ display: 'grid', gap: 12 }}>{jobs.map(job => <JobCard key={job.id} job={job} saved={savedIds.includes(job.id)} onSave={save}/>)}</div> : <EmptyState title="No roles match just yet" body="Try widening your filters or removing a skill to see more possibilities." action={<button className="btn btn-outline" onClick={() => { setForm({ sort: 'recent' }); setDraftKeyword(''); setSkillsText(''); }}>Clear all filters</button>}/>}
       </div>
       <aside style={{ display: 'grid', gap: 16 }}>
@@ -179,11 +180,11 @@ function JobDetailPage() {
   const [applyAsGuest, setApplyAsGuest] = useState(false);
   const [feedback, setFeedback] = useState('');
   const [err, setErr] = useState('');
-  useEffect(() => { if (job) service.getCompany(job.companyId).then(c => c && setCompany(c)); }, [job]);
-  useEffect(() => { service.listSavedJobs().then(xs => setSaved(xs.some(x => x.id === id))); }, [id]);
+  useEffect(() => { if (job) service.getCompany(job.companyId).then(c => c && setCompany(c)).catch(reason => setFeedback(reason instanceof Error ? reason.message : 'Could not load company details.')); }, [job]);
+  useEffect(() => { service.listSavedJobs().then(xs => setSaved(xs.some(x => x.id === id))).catch(reason => setFeedback(reason instanceof Error ? reason.message : 'Could not load saved roles.')); }, [id]);
   if (loading) return <div className="main-wrap" style={{ paddingTop: 50 }}><JobSkeleton/></div>;
   if (!job) return <div className="main-wrap page-enter" style={{ paddingTop: 50 }}><EmptyState title="This role has moved on" body="The listing may have closed or the link may be out of date." action={<Link className="btn btn-primary" href="/">Browse open roles</Link>}/></div>;
-  const toggleSaved = async () => { if (saved) await service.unsaveJob(id); else await service.saveJob(id); setSaved(!saved); setFeedback(saved ? 'Removed from your saved roles' : 'Saved for later'); };
+  const toggleSaved = async () => { try { if (saved) await service.unsaveJob(id); else await service.saveJob(id); setSaved(!saved); setFeedback(saved ? 'Removed from your saved roles' : 'Saved for later'); } catch (reason) { setFeedback(reason instanceof Error ? reason.message : 'Could not update saved roles.'); } };
   const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault(); const form = new FormData(e.currentTarget);
     try {
@@ -229,9 +230,11 @@ const modalBackdrop: CSSProperties = { position: 'fixed', zIndex: 40, inset: 0, 
 function SavedPage() {
   const { data, loading, error, reload } = useLoad(() => service.listSavedJobs());
   const [saved, setSaved] = useState<Job[]>([]);
+  const [notice, setNotice] = useState('');
   useEffect(() => setSaved(data || []), [data]);
-  const remove = async (id: string) => { await service.unsaveJob(id); setSaved(x => x.filter(j => j.id !== id)); };
+  const remove = async (id: string) => { try { await service.unsaveJob(id); setSaved(x => x.filter(j => j.id !== id)); } catch (reason) { setNotice(reason instanceof Error ? reason.message : 'Could not remove saved role.'); } };
   return <div className="main-wrap page-enter" style={{ paddingTop: 42, maxWidth: 850 }}><PageTitle kicker="For later" title="Your saved roles" subtitle="Good possibilities, kept in one place."/>
+    {notice && <div role="alert" style={{ marginBottom: 12, color: 'hsl(var(--destructive))', fontSize: 12 }}>{notice}</div>}
     {loading ? <JobSkeleton/> : error ? <ErrorState message={error} retry={reload}/> : saved.length ? <div style={{ display: 'grid', gap: 12 }}>{saved.map(j => <JobCard key={j.id} job={j} saved onSave={remove}/>)}</div> : <EmptyState title="Nothing saved yet" body="When a role catches your eye, save it here and come back when you're ready." action={<Link href="/" className="btn btn-primary">Explore roles <ArrowRight size={14}/></Link>}/>}
   </div>;
 }
@@ -379,9 +382,11 @@ function ApplicantsPage() {
 function NotificationsPage() {
   const { data, loading, error, reload } = useLoad(() => service.listNotifications());
   const [notes, setNotes] = useState<Notification[]>([]);
+  const [notice, setNotice] = useState('');
   useEffect(() => setNotes(data || []), [data]);
-  const read = async (id: string) => { await service.markNotificationRead(id); setNotes(xs => xs.map(n => n.id === id ? { ...n, readAt: new Date().toISOString() } : n)); };
+  const read = async (id: string) => { try { await service.markNotificationRead(id); setNotes(xs => xs.map(n => n.id === id ? { ...n, readAt: new Date().toISOString() } : n)); } catch (reason) { setNotice(reason instanceof Error ? reason.message : 'Could not mark notification as read.'); } };
   return <div className="main-wrap page-enter" style={{ paddingTop: 42, maxWidth: 820 }}><PageTitle kicker="Stay in the loop" title="Notifications" subtitle="Useful updates, without the noise."/>
+    {notice && <div role="alert" style={{ marginBottom: 12, color: 'hsl(var(--destructive))', fontSize: 12 }}>{notice}</div>}
     {loading ? <div className="surface skeleton" style={{ height: 180 }}/> : error ? <ErrorState message={error} retry={reload}/> : notes.length ? <div className="surface" style={{ overflow: 'hidden' }}>{notes.map((n,i) => <div key={n.id} data-testid={`notification-${n.id}`} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 14, alignItems: 'start', padding: 18, borderBottom: i === notes.length-1 ? 0 : '1px solid hsl(var(--border))', background: n.readAt ? 'transparent' : 'hsl(158 34% 95%)' }}><span style={{ width: 34, height: 34, borderRadius: 10, background: 'hsl(var(--secondary))', display: 'grid', placeItems: 'center', color: 'hsl(var(--primary))' }}><Bell size={16}/></span><div><strong style={{ fontSize: 13 }}>{n.title}</strong><p style={{ fontSize: 12, lineHeight: 1.6, color: 'hsl(var(--muted-foreground))', margin: '5px 0' }}>{n.body}</p><span className="font-mono" style={{ fontSize: 10, color: 'hsl(var(--muted-foreground))' }}>{n.createdAt}</span></div>{!n.readAt && <button className="btn btn-quiet" data-testid={`button-mark-read-${n.id}`} onClick={() => read(n.id)} style={{ fontSize: 10 }}>Mark read</button>}</div>)}</div> : <EmptyState title="All caught up" body="We'll put important application and job updates here."/>}
   </div>;
 }

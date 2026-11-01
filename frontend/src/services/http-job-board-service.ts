@@ -82,10 +82,11 @@ export class HttpJobBoardService implements JobBoardService {
   unsaveJob(id: string) { return protectedRequest<void>(`/saved-jobs/${id}/`, json('DELETE')); }
   listSavedJobs() { return protectedRequest<Job[]>('/saved-jobs/', {}, many<Job>('saved jobs', ['id', 'title'])); }
   getCurrentUser() {
-    const raw = storage()?.getItem(USER_KEY);
-    if (!raw) return Promise.reject(new ApiError(401, 'Please sign in to continue.'));
-    try { return Promise.resolve(one<User>('user', ['id', 'email', 'role'])(JSON.parse(raw))); }
-    catch { storage()?.removeItem(USER_KEY); return Promise.reject(new Error('Stored user data is invalid. Please sign in again.')); }
+    return protectedRequest<User>('/auth/me/', {}, value => {
+      const user = one<User>('user', ['id', 'email', 'role'])(value);
+      storage()?.setItem(USER_KEY, JSON.stringify(user));
+      return user;
+    });
   }
   registerAccount(_input: AccountRegistration) { return unsupported('Account registration'); }
   async login(input: LoginInput) {

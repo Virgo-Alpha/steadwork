@@ -40,8 +40,12 @@ describe('HttpJobBoardService', () => {
   it('clears the session and exposes backend detail on unauthorized responses', async () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(response({ access_token: 'token-1', token_type: 'Bearer', user: { id: 'u1', email: 'a@example.com', role: 'candidate' } }))
+      .mockResolvedValueOnce(response({ id: 'u1', email: 'a@example.com', role: 'candidate' }))
+      .mockResolvedValueOnce(response({ detail: 'Token is invalid.' }, 401))
       .mockResolvedValueOnce(response({ detail: 'Token is invalid.' }, 401));
     await service.login({ email: 'a@example.com', password: 'secret' });
+    await expect(service.getCurrentUser()).resolves.toMatchObject({ id: 'u1' });
+    expect(fetch).toHaveBeenLastCalledWith('/api/auth/me/', expect.objectContaining({ headers: expect.any(Headers) }));
     await expect(service.listApplications()).rejects.toMatchObject({ status: 401, detail: 'Token is invalid.', message: 'Token is invalid.' });
     await expect(service.getCurrentUser()).rejects.toMatchObject({ status: 401 });
   });
