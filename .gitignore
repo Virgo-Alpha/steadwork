@@ -62,3 +62,12 @@ backend/.local-data/
 
 # Local PostgreSQL Compose credentials
 /.env
+
+# Terraform local data, state and plans. Commit provider lock files, not state.
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+*.tfvars.json
+crash.log

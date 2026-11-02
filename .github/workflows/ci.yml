@@ -11,7 +11,9 @@ permissions:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Keep an active push run alive so Terraform deployments are not canceled
+  # midway; GitHub retains the newest pending run for this concurrency group.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   frontend-tests:
@@ -155,12 +157,105 @@ jobs:
           E2E_RECRUITER_PASSWORD: ${{ secrets.E2E_RECRUITER_PASSWORD }}
         run: make test
 
-# Future deployment plan only; everything below is a YAML comment and cannot
-# execute. Production deployment must be separately groomed and approved.
-# Prefer AWS with a narrowly scoped GitHub OIDC role; consider Render and
-# Vercel as alternatives. Use Terraform where practical. Begin with this one
-# unified CI workflow, then consider separate development and production
-# branches after the deployment path is established. Any future deployment
-# should verify the service with GET /api/health/ and fail clearly when it is
-# unhealthy. Add OTel, Prometheus, Grafana, alerting, and an on-call engineer
-# agent only as separately approved future work.
+  deploy-dev:
+    name: Publish image and deploy development
+    runs-on: ubuntu-24.04
+    needs: [full-validation]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+    environment: development
+    env:
+      TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
+      TF_CLOUD_ORGANIZATION: ${{ vars.TF_CLOUD_ORGANIZATION }}
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      RENDER_OWNER_ID: ${{ vars.RENDER_OWNER_ID }}
+      RENDER_WAIT_FOR_DEPLOY_COMPLETION: "true"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Generate timestamped image tag
+        id: image
+        env:
+          GHCR_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          image="ghcr.io/$(printf '%s' "$GHCR_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          tag="$(date -u +%Y%m%d-%H%M%S)-${GITHUB_SHA::7}"
+          echo "image_url=$image" >> "$GITHUB_OUTPUT"
+          echo "image_tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Build and publish image to GHCR
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.image.outputs.image_url }}:${{ steps.image.outputs.image_tag }}
+
+      - name: Create Render project and environments
+        run: |
+          terraform -chdir=deployment/terraform/bootstrap init \
+            -backend-config="organization=$TF_CLOUD_ORGANIZATION" \
+            -backend-config="workspaces.name=steadwork-bootstrap"
+          terraform -chdir=deployment/terraform/bootstrap apply -auto-approve \
+            -var="project_name=steadwork"
+
+      - name: Deploy the image and database to Render development
+        id: deploy
+        env:
+          IMAGE_URL: ${{ steps.image.outputs.image_url }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          terraform -chdir=deployment/terraform/dev init \
+            -backend-config="organization=$TF_CLOUD_ORGANIZATION" \
+            -backend-config="workspaces.name=steadwork-dev"
+          terraform -chdir=deployment/terraform/dev apply -auto-approve \
+            -var="terraform_organization=$TF_CLOUD_ORGANIZATION" \
+            -var="image_url=$IMAGE_URL" \
+            -var="image_digest=$IMAGE_DIGEST"
+          service_url="$(terraform -chdir=deployment/terraform/dev output -raw service_url)"
+          echo "service_url=$service_url" >> "$GITHUB_OUTPUT"
+
+      - name: Verify development is healthy
+        env:
+          SERVICE_URL: ${{ steps.deploy.outputs.service_url }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error "$SERVICE_URL/api/health/"; then
+              echo
+              exit 0
+            fi
+            echo "Health check attempt $attempt/30 failed; retrying in 5 seconds."
+            sleep 5
+          done
+          echo "Development did not become healthy at $SERVICE_URL/api/health/" >&2
+          exit 1
+
+      - name: Point the dev tag at the successfully deployed image
+        env:
+          IMAGE_URL: ${{ steps.image.outputs.image_url }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+          IMAGE_TAG: ${{ steps.image.outputs.image_tag }}
+        run: |
+          set -euo pipefail
+          docker buildx imagetools create --prefer-index=false \
+            --tag "$IMAGE_URL:dev" "$IMAGE_URL@$IMAGE_DIGEST"
+          echo "Deployed $IMAGE_URL:$IMAGE_TAG to dev and updated $IMAGE_URL:dev."

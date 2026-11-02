@@ -28,5 +28,6 @@ RUN useradd --create-home --uid 10001 steadwork \
     && chown -R steadwork:steadwork /app /opt/steadwork
 USER steadwork
 
-EXPOSE 8000
-CMD ["sh", "-c", "uv run --no-sync alembic upgrade head && uv run --no-sync python manage.py runserver 0.0.0.0:8000"]
+ENV PORT=10000
+EXPOSE 10000
+CMD ["sh", "-c", "exec uv run --no-sync gunicorn steadwork.wsgi:application --bind 0.0.0.0:${PORT:-10000} --workers 3 --access-logfile - --error-logfile -"]

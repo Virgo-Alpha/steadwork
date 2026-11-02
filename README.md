@@ -63,11 +63,13 @@ docker compose logs -f app postgres
 
 ## Deployment
 
+Render is managed with Terraform. After all CI tests pass, GitHub Actions publishes a timestamped GHCR image and deploys it to development. Manual production promotion defaults to the latest image that passed the dev health check; supply `IMAGE_TAG=YYYYMMDD-HHMMSS-shortsha` only for a rollback. Production remains gated by GitHub Environment approval. See the [deployment guide](_docs/deployment.md) for setup, secrets, retention, and Terraform teardown commands.
+
 ## CI/CD
 
 ### GitHub Actions
 
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on pull requests, pushes to `main`, and manual `workflow_dispatch`. Frontend and backend test jobs run in parallel. Full validation then checks Compose configuration, builds the app image, installs dependencies and runs `make test`. The full validation job needs the four E2E Actions secrets named above; on fork pull requests it is skipped because repository secrets are unavailable, while the parallel frontend and backend jobs still run. The workflow has no deployment or release publishing job. Its commented deployment outline is non-executable; production deployment and release work are deferred.
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on pull requests, pushes to `main`, and manual `workflow_dispatch`. Frontend and backend test jobs run in parallel. Full validation then checks Compose configuration, builds the app image, installs dependencies and runs `make test`. The full validation job needs the four E2E Actions secrets named above; on fork pull requests it is skipped because repository secrets are unavailable, while the parallel frontend and backend jobs still run. A successful push to `main` then builds a tagged image and deploys it to Render development. Production promotion is handled by [the manual deployment workflow](.github/workflows/deploy-prod.yml) after the protected `production` GitHub Environment approves it. See the [deployment guide](_docs/deployment.md) for the required secrets/variables and setup.
 
 ## Observability and Monitority
 TODO: Create observability_and_monitoring.md and add telemetry using OpenTelemetry, Prometheus and Grafana
