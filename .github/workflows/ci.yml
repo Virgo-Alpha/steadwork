@@ -16,7 +16,7 @@ concurrency:
 jobs:
   frontend-tests:
     name: Frontend tests and build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -55,7 +55,7 @@ jobs:
 
   backend-tests:
     name: Backend tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -81,7 +81,9 @@ jobs:
 
   full-validation:
     name: Full validation and Compose E2E
-    runs-on: ubuntu-latest
+    # Playwright 1.55.1 does not provide Chromium builds for Ubuntu 26.04;
+    # keep the browser job on a supported, stable runner image.
+    runs-on: ubuntu-24.04
     needs: [frontend-tests, backend-tests]
     # Fork PRs do not receive repository secrets. Their parallel unit jobs
     # still run; secret-dependent Compose E2E runs on same-repository PRs
