@@ -104,7 +104,7 @@ beforeAll(async () => {
     try { return (await originalFetch(`${backendUrl()}/api/health/`)).ok; } catch { return false; }
   });
 
-  vite = start('/usr/bin/npm', ['run', 'dev', '--', '--host', '127.0.0.1', '--port', String(vitePort)], rootDir, {
+  vite = start('npm', ['run', 'dev', '--', '--host', '127.0.0.1', '--port', String(vitePort)], rootDir, {
     API_PROXY_TARGET: backendUrl(),
   });
   await waitFor(async () => {

@@ -32,8 +32,9 @@ These are not part of the current API or schema. The current SQLAlchemy models
 and Alembic revisions remain authoritative; no migrations or tables for these
 features are implied.
 
-The following decisions must be recorded before dependent implementation is
-groomed:
+The following decisions remain unresolved. Issues #26–#28 were closed without
+recording the requested product decisions; dependent implementation stays
+deferred until those decisions are documented:
 
 - [#26](https://github.com/Virgo-Alpha/steadwork/issues/26) decides CV binary
   storage, authenticated access/download, validation and file-specific

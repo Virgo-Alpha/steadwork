@@ -10,6 +10,16 @@ Work is tracked as GitHub issues in the [public issue tracker](https://github.co
 
 Current API behavior includes public job and company reads; bearer-token login; candidate profile, saved jobs and application flows; employer job and applicant workflows; and in-app notifications. Guest internal applications are accepted. Authentication uses bearer tokens. Registration, email verification, password reset, recommendations, CV binary upload/storage, company profile/team administration, platform administrator dashboards and moderation, external-apply tracking and email delivery are not implemented in the API. The mock may demonstrate UI behavior beyond the backend; its sample CV names are not uploaded files. No automatic fallback from API failures to mock data occurs.
 
+## Local setup and commands
+
+Requirements: Node.js/npm for the frontend, Python and [uv](https://docs.astral.sh/uv/) for the backend, and Docker Compose for the full browser suite. From the repository root:
+
+```sh
+make up
+```
+
+`make up` runs `make install`, applies the local SQLite migrations, starts Vite and Django, waits for both health checks, then prints the app and API URLs and streams service logs to the terminal. Open <http://127.0.0.1:5173>; the API is at <http://127.0.0.1:8000/api/>. Stop with Ctrl-C or `make stop`. To install dependencies without starting the app, run `make install`; to start already-installed services, run `make dev`. Individual targets are `make frontend` and `make backend`. Ports can be changed with `make up FRONTEND_PORT=5174 BACKEND_PORT=8001`.
+
 ## Agent team and process
 
 The PM defines checkable scope ([PM guidance](_docs/team/pm.md)); the software engineer implements one groomed issue ([engineering guidance](_docs/team/software-engineer.md)); QA verifies the acceptance criteria and reports a verdict ([QA guidance](_docs/team/qa-engineer.md)). The orchestrator coordinates tracks and a separate reviewer reviews completed work. See the [local task backlog](_docs/tasks.md) for the tracked work.
@@ -29,18 +39,6 @@ Login returns an expiring bearer token. Protected client requests send it in the
 
 Local backend development uses a persistent SQLite database at `backend/.local-data/steadwork.sqlite3`. Schema changes are applied with Alembic; see the migration commands in the [backend guide](backend/README.md). This is a real local database, not a dummy or automatically reset store. `STEADWORK_STORE=inmemory` is intended for tests and diagnostics. The Compose stack uses PostgreSQL 17 with a persistent named volume. SQLite and PostgreSQL are the supported configured stores.
 
-## Local setup and commands
-
-Requirements: Node.js/npm for the frontend, Python and [uv](https://docs.astral.sh/uv/) for the backend, and Docker Compose for the full browser suite. From the repository root:
-
-```sh
-make install
-cd backend && uv run alembic upgrade head && cd ..
-make dev
-```
-
-`make install` runs `npm --prefix frontend ci` and `uv sync` in `backend/`. On a fresh local SQLite database, apply the migration before starting `make dev`. The combined development command starts Vite at <http://127.0.0.1:5173> and Django at <http://127.0.0.1:8000>; logs are under `.steadwork/logs/`. Stop with Ctrl-C or `make stop`. Individual targets are `make frontend` and `make backend`. Ports can be changed with `make dev FRONTEND_PORT=5174 BACKEND_PORT=8001`.
-
 ## Testing
 Install all test dependencies, including Playwright Chromium, with `make test-setup`. Run the complete suites in order (frontend Vitest including live API integration, backend pytest, then isolated Compose-backed Playwright E2E) with:
 
@@ -48,7 +46,7 @@ Install all test dependencies, including Playwright Chromium, with `make test-se
 make test
 ```
 
-For frontend and backend checks without Docker/Playwright, run `make test-fast`. To run only the browser suite, run `make e2e`; it requires Docker Compose and the seeded demo credentials supplied as `E2E_CANDIDATE_EMAIL`, `E2E_CANDIDATE_PASSWORD`, `E2E_RECRUITER_EMAIL`, and `E2E_RECRUITER_PASSWORD`. Configure these environment variables with the local seeded account values from the backend guide. The E2E harness creates a uniquely named Compose project and database volume and removes that isolated project and volume when it exits. It does not target the normal root Compose project.
+For frontend and backend checks without Docker/Playwright, run `make test-fast`. To run only the browser suite, run `make e2e`; it requires Docker Compose and defaults to the seeded demo accounts documented in the backend guide. Set `E2E_CANDIDATE_EMAIL`, `E2E_CANDIDATE_PASSWORD`, `E2E_RECRUITER_EMAIL`, and `E2E_RECRUITER_PASSWORD` to override them. CI supplies these values as secrets. The E2E harness creates a uniquely named Compose project and database volume and removes that isolated project and volume when it exits. It does not target the normal root Compose project.
 
 ## Containerization
 
@@ -69,7 +67,7 @@ docker compose logs -f app postgres
 
 ### GitHub Actions
 
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on pull requests, pushes to `main`, and manual `workflow_dispatch`. Frontend and backend test jobs run in parallel. Full validation then checks Compose configuration, builds the app image, installs dependencies and runs `make test`. The full validation job needs the four E2E Actions secrets named above; on fork pull requests it is skipped because repository secrets are unavailable, while the parallel frontend and backend jobs still run. The workflow has no deployment or release publishing job. Its commented deployment outline is non-executable; production deployment and release work remain open in issue [#25](https://github.com/Virgo-Alpha/steadwork/issues/25).
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on pull requests, pushes to `main`, and manual `workflow_dispatch`. Frontend and backend test jobs run in parallel. Full validation then checks Compose configuration, builds the app image, installs dependencies and runs `make test`. The full validation job needs the four E2E Actions secrets named above; on fork pull requests it is skipped because repository secrets are unavailable, while the parallel frontend and backend jobs still run. The workflow has no deployment or release publishing job. Its commented deployment outline is non-executable; production deployment and release work are deferred.
 
 ## Observability and Monitority
 TODO: Create observability_and_monitoring.md and add telemetry using OpenTelemetry, Prometheus and Grafana

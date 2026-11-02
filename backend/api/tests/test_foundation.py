@@ -19,7 +19,8 @@ def clean_store():
 def test_seed_data_is_deterministic_and_passwords_are_not_exposed():
     store = get_store()
     assert [company.id for company in store.companies] == ["company-acme", "company-orbit"]
-    assert [job.id for job in store.jobs] == ["job-platform", "job-design"]
+    assert {job.id for job in store.jobs} >= {"job-platform", "job-design", "job-security", "job-analytics", "job-infrastructure", "job-research", "job-devrel", "job-accessibility"}
+    assert len(store.jobs) == 8
     assert [user.email for user in store.users] == [
         "candidate@example.com", "recruiter@example.com", "admin@example.com"
     ]

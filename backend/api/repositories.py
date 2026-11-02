@@ -105,6 +105,40 @@ class SQLAlchemyStoreRepository:
 
             self.replace(_seed())
             self.session.flush()
+        else:
+            # Add the expanded demo catalog once to databases created with the
+            # original two-job seed. Never replace or overwrite existing rows.
+            core_ids = {"job-platform", "job-design"}
+            extra_ids = {
+                "job-security", "job-analytics", "job-infrastructure",
+                "job-research", "job-devrel", "job-accessibility",
+            }
+            existing_ids = set(self.session.scalars(select(JobRecord.id)).all())
+            if core_ids <= existing_ids and not (extra_ids & existing_ids):
+                from .store import _seed
+
+                seed_jobs = _seed().jobs
+                next_position = max(
+                    self.session.scalars(select(JobRecord.position)).all(),
+                    default=-1,
+                ) + 1
+                for item in seed_jobs:
+                    if item.id in extra_ids:
+                        self.session.add(JobRecord(
+                            id=item.id, company_id=item.company_id, title=item.title,
+                            description=item.description, location=item.location,
+                            salary_min=item.salary_min, salary_max=item.salary_max,
+                            currency=item.currency, remote_policy=item.remote_policy,
+                            job_type=item.job_type, experience_level=item.experience_level,
+                            skills=item.skills or [], responsibilities=item.responsibilities or [],
+                            qualifications=item.qualifications or [], benefits=item.benefits or [],
+                            application_method=item.application_method,
+                            external_apply_url=item.external_apply_url, status=item.status,
+                            posted_at=item.posted_at, deadline=item.deadline,
+                            application_count=item.application_count, position=next_position,
+                        ))
+                        next_position += 1
+                self.session.flush()
         users = [User(row.id, row.email, row.role, row.password_hash) for row in self.session.scalars(select(UserRecord).order_by(UserRecord.position, UserRecord.id)).all()]
         companies = [Company(row.id, row.name, row.description, row.website, row.logo, row.accent) for row in self.session.scalars(select(CompanyRecord).order_by(CompanyRecord.position, CompanyRecord.id)).all()]
         jobs = [

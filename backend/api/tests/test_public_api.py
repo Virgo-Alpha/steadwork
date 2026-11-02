@@ -17,7 +17,8 @@ def clean_store():
 def test_public_jobs_are_contract_compatible_and_visible_only():
     response = APIClient().get("/api/jobs/")
     assert response.status_code == 200
-    assert {job["id"] for job in response.json()} == {"job-platform", "job-design"}
+    assert {"job-platform", "job-design", "job-security", "job-analytics", "job-infrastructure", "job-research", "job-devrel", "job-accessibility"} <= {job["id"] for job in response.json()}
+    assert len(response.json()) == 8
     assert response.json()[0]["companyId"]
     assert all(job["status"] == "Published" for job in response.json())
     assert all("salaryMin" in job and "responsibilities" in job for job in response.json())
@@ -27,12 +28,12 @@ def test_public_jobs_are_contract_compatible_and_visible_only():
     "query, expected",
     [
         ({"keyword": "platform"}, {"job-platform"}),
-        ({"location": "remote"}, {"job-platform"}),
-        ({"jobType": "Full-time"}, {"job-platform", "job-design"}),
-        ({"remotePolicy": "Hybrid"}, {"job-design"}),
-        ({"experienceLevel": "Senior"}, {"job-platform"}),
-        ({"companyId": "company-orbit"}, {"job-design"}),
-        ({"salaryMin": "130000"}, {"job-platform"}),
+        ({"location": "remote"}, {"job-platform", "job-security", "job-research"}),
+        ({"jobType": "Full-time"}, {"job-platform", "job-design", "job-security"}),
+        ({"remotePolicy": "Hybrid"}, {"job-design", "job-analytics"}),
+        ({"experienceLevel": "Senior"}, {"job-platform", "job-security"}),
+        ({"companyId": "company-orbit"}, {"job-design", "job-analytics", "job-research", "job-accessibility"}),
+        ({"salaryMin": "130000"}, {"job-platform", "job-security"}),
         ({"skills": "Python,Django"}, {"job-platform"}),
     ],
 )
@@ -53,15 +54,16 @@ def test_sorting_and_tie_breakers_are_deterministic():
     now = timezone.now()
     for job in store.jobs:
         job.posted_at = now
-    assert [j["id"] for j in APIClient().get("/api/jobs/", {"sort": "recent"}).json()] == [
+    assert [j["id"] for j in APIClient().get("/api/jobs/", {"sort": "recent"}).json()[:2]] == [
         "job-design",
         "job-platform",
     ]
-    assert [j["id"] for j in APIClient().get("/api/jobs/", {"sort": "salary"}).json()] == [
+    assert [j["id"] for j in APIClient().get("/api/jobs/", {"sort": "salary"}).json()[:3]] == [
+        "job-security",
+        "job-infrastructure",
         "job-platform",
-        "job-design",
     ]
-    assert [j["id"] for j in APIClient().get("/api/jobs/", {"sort": "relevance"}).json()] == [
+    assert [j["id"] for j in APIClient().get("/api/jobs/", {"sort": "relevance"}).json()[:2]] == [
         "job-design",
         "job-platform",
     ]

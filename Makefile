@@ -5,7 +5,7 @@ BACKEND_PORT ?= 8000
 STATE_DIR ?= .steadwork
 LOG_DIR ?= $(STATE_DIR)/logs
 
-.PHONY: dev frontend backend install setup stop cleanup e2e test test-fast \
+.PHONY: dev up frontend backend install setup stop cleanup e2e test test-fast \
 	e2e-install test-setup test-frontend test-backend
 
 FRONTEND_TEST_COMMAND ?= npm test
@@ -26,7 +26,7 @@ dev:
 		' service "$$@" >"$(LOG_DIR)/$$name.log" 2>&1 & \
 		printf '%s\n' "$$!"; \
 	}; \
-	frontend_pid=$$(start_service frontend sh -c 'cd frontend && exec npm run dev -- --port "$(FRONTEND_PORT)"'); \
+	frontend_pid=$$(start_service frontend sh -c 'cd frontend && exec npm run dev -- --host 127.0.0.1 --port "$(FRONTEND_PORT)"'); \
 	backend_pid=$$(start_service backend sh -c 'cd backend && exec uv run python manage.py runserver "127.0.0.1:$(BACKEND_PORT)"'); \
 	printf '%s\n' "$$frontend_pid" >"$(STATE_DIR)/frontend.pid"; \
 	printf '%s\n' "$$backend_pid" >"$(STATE_DIR)/backend.pid"; \
@@ -34,7 +34,19 @@ dev:
 	cleanup() { stop_group "$$frontend_pid"; stop_group "$$backend_pid"; wait "$$frontend_pid" "$$backend_pid" 2>/dev/null || true; rm -f "$(STATE_DIR)"/frontend.pid "$(STATE_DIR)"/backend.pid; }; \
 	trap cleanup EXIT; \
 	trap 'exit 130' INT TERM; \
-	while [ ! -f "$(STATE_DIR)/frontend.status" ] && [ ! -f "$(STATE_DIR)/backend.status" ]; do sleep 1; done; \
+	ready=0; attempt=0; \
+	while [ "$$attempt" -lt 60 ]; do \
+		if [ -f "$(STATE_DIR)/frontend.status" ] || [ -f "$(STATE_DIR)/backend.status" ]; then break; fi; \
+		if curl -fsS "http://127.0.0.1:$(FRONTEND_PORT)/" >/dev/null 2>&1 && curl -fsS "http://127.0.0.1:$(BACKEND_PORT)/api/health/" >/dev/null 2>&1; then ready=1; break; fi; \
+		attempt=$$((attempt + 1)); sleep 1; \
+	done; \
+	if [ "$$ready" -eq 1 ]; then \
+		printf '%s\n' "Steadwork is running:" "  App:     http://127.0.0.1:$(FRONTEND_PORT)" "  API:     http://127.0.0.1:$(BACKEND_PORT)/api/" "  Logs:    $(LOG_DIR)/frontend.log and $(LOG_DIR)/backend.log"; \
+		tail -f "$(LOG_DIR)/frontend.log" "$(LOG_DIR)/backend.log"; \
+	fi; \
+	printf '%s\n' "Services did not become ready within 60 seconds; startup logs follow:" >&2; \
+	cat "$(LOG_DIR)/frontend.log" "$(LOG_DIR)/backend.log" >&2; \
+	if [ "$$ready" -ne 1 ]; then exit 1; fi; \
 	status=0; \
 	if [ -f "$(STATE_DIR)/frontend.status" ]; then \
 		frontend_status=$$(cat "$(STATE_DIR)/frontend.status"); \
@@ -59,6 +71,11 @@ install:
 	cd backend && uv sync
 
 setup: install
+
+# One-command local setup: dependencies, SQLite schema, then both services.
+up: install
+	@cd backend && uv run alembic upgrade head
+	@$(MAKE) --no-print-directory dev
 
 # The full command intentionally runs each suite in this order: frontend,
 # backend, then the isolated Compose-backed browser suite.

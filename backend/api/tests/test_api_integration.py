@@ -60,7 +60,7 @@ def test_public_health_jobs_companies_and_missing_resources():
 
     jobs = client.get("/api/jobs/")
     assert jobs.status_code == 200
-    assert {job["id"] for job in jobs.json()} == {"job-platform", "job-design"}
+    assert {"job-platform", "job-design", "job-security", "job-analytics", "job-infrastructure", "job-research", "job-devrel", "job-accessibility"} <= {job["id"] for job in jobs.json()}
     assert all(job["status"] == "Published" for job in jobs.json())
     assert {"companyId", "salaryMin", "responsibilities"} <= jobs.json()[0].keys()
     assert client.get("/api/jobs/job-platform/").json()["title"] == "Platform Engineer"

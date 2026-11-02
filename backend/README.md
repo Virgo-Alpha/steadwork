@@ -91,7 +91,9 @@ are preserved across backend restarts. The committed Alembic revision creates
 all eight current persistence tables and their keys, indexes, and relationships.
 
 The seed is deterministic: companies `company-acme` and
-`company-orbit`, jobs `job-platform` and `job-design`, and users
+`company-orbit`, eight jobs (`job-platform`, `job-design`,
+`job-security`, `job-analytics`, `job-infrastructure`, `job-research`,
+`job-devrel`, and `job-accessibility`), and users
 `candidate@example.com`, `recruiter@example.com`, and
 `admin@example.com`. Demo passwords are respectively
 `candidate-password`, `recruiter-password`, and `admin-password`.
