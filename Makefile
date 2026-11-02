@@ -4,8 +4,9 @@ FRONTEND_PORT ?= 5173
 BACKEND_PORT ?= 8000
 STATE_DIR ?= .steadwork
 LOG_DIR ?= $(STATE_DIR)/logs
+PLAYWRIGHT_BROWSERS_PATH ?= $(CURDIR)/e2e/.cache/ms-playwright
 
-.PHONY: dev up frontend backend install setup stop cleanup e2e test test-fast \
+.PHONY: dev run frontend backend install setup stop cleanup e2e test test-fast \
 	e2e-install test-setup test-frontend test-backend
 
 FRONTEND_TEST_COMMAND ?= npm test
@@ -73,7 +74,7 @@ install:
 setup: install
 
 # One-command local setup: dependencies, SQLite schema, then both services.
-up: install
+run: install
 	@cd backend && uv run alembic upgrade head
 	@$(MAKE) --no-print-directory dev
 
@@ -98,10 +99,10 @@ test-backend:
 
 e2e:
 	@printf '%s\n' '== Playwright E2E suite (isolated Docker Compose project) =='
-	@cd e2e && npm test
+	@cd e2e && PLAYWRIGHT_BROWSERS_PATH="$(PLAYWRIGHT_BROWSERS_PATH)" npm test
 
 e2e-install:
-	@cd e2e && npm ci && PLAYWRIGHT_BROWSERS_PATH=.cache/ms-playwright npx playwright install chromium
+	@cd e2e && npm ci && PLAYWRIGHT_BROWSERS_PATH="$(PLAYWRIGHT_BROWSERS_PATH)" npx playwright install chromium
 
 test-setup:
 	@$(MAKE) --no-print-directory install

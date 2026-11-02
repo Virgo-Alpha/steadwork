@@ -68,6 +68,10 @@ fi
 export POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD E2E_PORT
 export DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
 export PLAYWRIGHT_BROWSERS_PATH=${PLAYWRIGHT_BROWSERS_PATH:-$ROOT_DIR/e2e/.cache/ms-playwright}
+if ! (cd "$ROOT_DIR/e2e" && node -e 'const fs = require("node:fs"); const { chromium } = require("@playwright/test"); process.exit(fs.existsSync(chromium.executablePath()) ? 0 : 1)'); then
+  printf '%s\n' 'Playwright Chromium is missing; installing it into:' "  $PLAYWRIGHT_BROWSERS_PATH"
+  (cd "$ROOT_DIR/e2e" && ./node_modules/.bin/playwright install chromium)
+fi
 STACK_STARTED=1
 compose up --build --detach --wait --wait-timeout 240
 export E2E_BASE_URL="http://127.0.0.1:$E2E_PORT"

@@ -157,7 +157,10 @@ def test_store_repository_round_trips_all_domain_data_and_updates(tmp_path):
         restored = repository.load()
         assert [item.id for item in restored.users] == ["user-candidate", "user-recruiter", "user-admin"]
         assert [item.id for item in restored.companies] == ["company-acme", "company-orbit"]
-        assert [item.id for item in restored.jobs] == ["job-platform", "job-design"]
+        assert [item.id for item in restored.jobs] == [
+            "job-platform", "job-design", "job-security", "job-analytics",
+            "job-infrastructure", "job-research", "job-devrel", "job-accessibility",
+        ]
         assert [item.id for item in restored.applications] == ["application-1"]
         assert restored.memberships and restored.profiles == {} and restored.saved_jobs == {}
         assert restored.notifications == []

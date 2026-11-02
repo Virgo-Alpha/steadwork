@@ -114,6 +114,20 @@ class SQLAlchemyStoreRepository:
                 "job-research", "job-devrel", "job-accessibility",
             }
             existing_ids = set(self.session.scalars(select(JobRecord.id)).all())
+            if extra_ids & existing_ids:
+                # These fixed sample postings were originally attached to the
+                # recruiter fixture's company; keep that account's fixture
+                # focused on its original managed job.
+                misowned_ids = set(self.session.scalars(
+                    select(JobRecord.id).where(
+                        JobRecord.id.in_(extra_ids),
+                        JobRecord.company_id == "company-acme",
+                    )
+                ).all())
+                if misowned_ids:
+                    self.session.query(JobRecord).filter(
+                        JobRecord.id.in_(misowned_ids),
+                    ).update({JobRecord.company_id: "company-orbit"}, synchronize_session=False)
             if core_ids <= existing_ids and not (extra_ids & existing_ids):
                 from .store import _seed
 

@@ -15,10 +15,10 @@ Current API behavior includes public job and company reads; bearer-token login; 
 Requirements: Node.js/npm for the frontend, Python and [uv](https://docs.astral.sh/uv/) for the backend, and Docker Compose for the full browser suite. From the repository root:
 
 ```sh
-make up
+make run
 ```
 
-`make up` runs `make install`, applies the local SQLite migrations, starts Vite and Django, waits for both health checks, then prints the app and API URLs and streams service logs to the terminal. Open <http://127.0.0.1:5173>; the API is at <http://127.0.0.1:8000/api/>. Stop with Ctrl-C or `make stop`. To install dependencies without starting the app, run `make install`; to start already-installed services, run `make dev`. Individual targets are `make frontend` and `make backend`. Ports can be changed with `make up FRONTEND_PORT=5174 BACKEND_PORT=8001`.
+`make run` runs `make install`, applies the local SQLite migrations, starts Vite and Django, waits for both health checks, then prints the app and API URLs and streams service logs to the terminal. Open <http://127.0.0.1:5173>; the API is at <http://127.0.0.1:8000/api/>. Stop with Ctrl-C or `make stop`. To install dependencies without starting the app, run `make install`; to start already-installed services, run `make dev`. Individual targets are `make frontend` and `make backend`. Ports can be changed with `make run FRONTEND_PORT=5174 BACKEND_PORT=8001`.
 
 ## Agent team and process
 

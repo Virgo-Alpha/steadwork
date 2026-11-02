@@ -6,12 +6,12 @@ a unique Compose project and database volume for each run, waits for the app
 health check, and removes only that project and volume on success, test failure,
 startup failure, or an interrupt handled by the runner.
 
-Install the isolated test dependency and Chromium browser once:
+Install the isolated test dependency and Chromium browser with `make e2e-install`
+(or `make test-setup`). The E2E runner also checks for its pinned Chromium build
+and installs it into the same cache if it is missing:
 
 ```sh
-cd e2e
-npm ci
-PLAYWRIGHT_BROWSERS_PATH=.cache/ms-playwright npx playwright install chromium
+make e2e-install
 ```
 
 The suite requires seeded local-only candidate and recruiter accounts. Provide

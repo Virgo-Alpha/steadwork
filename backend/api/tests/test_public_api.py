@@ -27,13 +27,13 @@ def test_public_jobs_are_contract_compatible_and_visible_only():
 @pytest.mark.parametrize(
     "query, expected",
     [
-        ({"keyword": "platform"}, {"job-platform"}),
+        ({"keyword": "platform"}, {"job-platform", "job-infrastructure", "job-devrel"}),
         ({"location": "remote"}, {"job-platform", "job-security", "job-research"}),
         ({"jobType": "Full-time"}, {"job-platform", "job-design", "job-security"}),
-        ({"remotePolicy": "Hybrid"}, {"job-design", "job-analytics"}),
+        ({"remotePolicy": "Hybrid"}, {"job-design", "job-analytics", "job-infrastructure"}),
         ({"experienceLevel": "Senior"}, {"job-platform", "job-security"}),
-        ({"companyId": "company-orbit"}, {"job-design", "job-analytics", "job-research", "job-accessibility"}),
-        ({"salaryMin": "130000"}, {"job-platform", "job-security"}),
+        ({"companyId": "company-orbit"}, {"job-design", "job-security", "job-analytics", "job-infrastructure", "job-research", "job-devrel", "job-accessibility"}),
+        ({"salaryMin": "130000"}, {"job-platform", "job-security", "job-infrastructure", "job-research", "job-devrel"}),
         ({"skills": "Python,Django"}, {"job-platform"}),
     ],
 )
@@ -54,18 +54,17 @@ def test_sorting_and_tie_breakers_are_deterministic():
     now = timezone.now()
     for job in store.jobs:
         job.posted_at = now
-    assert [j["id"] for j in APIClient().get("/api/jobs/", {"sort": "recent"}).json()[:2]] == [
-        "job-design",
-        "job-platform",
+    assert [j["id"] for j in APIClient().get("/api/jobs/", {"sort": "recent"}).json()] == [
+        "job-accessibility", "job-analytics", "job-design", "job-devrel",
+        "job-infrastructure", "job-platform", "job-research", "job-security",
     ]
-    assert [j["id"] for j in APIClient().get("/api/jobs/", {"sort": "salary"}).json()[:3]] == [
-        "job-security",
-        "job-infrastructure",
-        "job-platform",
+    assert [j["id"] for j in APIClient().get("/api/jobs/", {"sort": "salary"}).json()] == [
+        "job-security", "job-infrastructure", "job-platform", "job-devrel",
+        "job-research", "job-accessibility", "job-design", "job-analytics",
     ]
-    assert [j["id"] for j in APIClient().get("/api/jobs/", {"sort": "relevance"}).json()[:2]] == [
-        "job-design",
-        "job-platform",
+    assert [j["id"] for j in APIClient().get("/api/jobs/", {"sort": "relevance"}).json()] == [
+        "job-accessibility", "job-analytics", "job-design", "job-devrel",
+        "job-infrastructure", "job-platform", "job-research", "job-security",
     ]
 
 
@@ -83,7 +82,8 @@ def test_invalid_query_values_return_json_400(query):
 def test_expired_and_unpublished_jobs_are_hidden_from_list_and_detail():
     store = get_store()
     store.jobs[0].status = "Draft"
-    store.jobs[1].deadline = timezone.now() - timedelta(days=1)
+    for job in store.jobs[1:]:
+        job.deadline = timezone.now() - timedelta(days=1)
     assert APIClient().get("/api/jobs/").json() == []
     assert APIClient().get("/api/jobs/job-platform/").status_code == 404
     assert APIClient().get("/api/jobs/job-design/").status_code == 404
