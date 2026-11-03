@@ -52,7 +52,8 @@ test('visitor, candidate, and recruiter complete an application flow in isolated
     await candidate.goto(appPath('/employer/jobs/job-platform/applicants'));
     const deniedResponse = await deniedResponsePromise;
     expect(deniedResponse.status(), 'candidate employer applications response').toBe(403);
-    await expect(candidate.getByRole('alert')).toContainText('permission');
+    await expect(candidate.getByRole('alert').filter({ hasText: 'You do not have permission to' }))
+      .toContainText('permission');
     await expect(candidate.getByTestId(/^row-applicant-/)).toHaveCount(0);
 
     await candidate.goto(appPath('/profile'));
