@@ -19,3 +19,10 @@ module "environment" {
 }
 
 output "service_url" { value = module.environment.service_url }
+
+# Prod consumes this sensitive output while the Render free-tier limit requires
+# both app environments to share one database.
+output "database_url" {
+  value     = module.environment.database_url
+  sensitive = true
+}

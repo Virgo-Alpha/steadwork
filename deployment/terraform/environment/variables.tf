@@ -37,6 +37,19 @@ variable "postgres_plan" {
   default = "free"
 }
 
+# Non-empty only when an environment reuses another Terraform workspace's DB.
+# This currently lets prod share dev's sole free Render Postgres instance.
+variable "existing_database_url" {
+  type      = string
+  default   = ""
+  sensitive = true
+}
+
+variable "reuse_existing_database" {
+  type    = bool
+  default = false
+}
+
 variable "allowed_hosts" {
   type = string
 }

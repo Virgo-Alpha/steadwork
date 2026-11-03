@@ -24,6 +24,10 @@ locals {
 }
 
 resource "render_postgres" "database" {
+  # Render allows only one active free Postgres database per workspace. Prod
+  # supplies the dev database URL and skips this resource; remove the conditional
+  # and use a dedicated database when production isolation is available.
+  count          = var.reuse_existing_database ? 0 : 1
   name           = "${local.service_name}-db"
   plan           = var.postgres_plan
   region         = var.region
@@ -31,6 +35,17 @@ resource "render_postgres" "database" {
   database_name  = "steadwork"
   database_user  = "steadwork"
   environment_id = local.environment_id
+}
+
+# Preserve the existing development database in Terraform state when moving
+# this resource to count-based creation for the shared free-tier configuration.
+moved {
+  from = render_postgres.database
+  to   = render_postgres.database[0]
+}
+
+locals {
+  database_url = var.reuse_existing_database ? var.existing_database_url : render_postgres.database[0].connection_info.internal_connection_string
 }
 
 resource "render_web_service" "app" {
@@ -49,7 +64,7 @@ resource "render_web_service" "app" {
   }
 
   env_vars = {
-    DATABASE_URL = { value = render_postgres.database.connection_info.internal_connection_string }
+    DATABASE_URL = { value = local.database_url }
     STEADWORK_STORE = { value = "postgresql" }
     DJANGO_DEBUG = { value = "false" }
     DJANGO_SECRET_KEY = { generate_value = true }
@@ -62,5 +77,10 @@ output "service_url" {
 }
 
 output "database_name" {
-  value = render_postgres.database.name
+  value = var.reuse_existing_database ? "steadwork-development-db" : render_postgres.database[0].name
+}
+
+output "database_url" {
+  value     = local.database_url
+  sensitive = true
 }
