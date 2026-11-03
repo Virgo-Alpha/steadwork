@@ -29,7 +29,7 @@ variable "region" {
 
 variable "web_plan" {
   type    = string
-  default = "starter"
+  default = "free"
 }
 
 variable "postgres_plan" {
