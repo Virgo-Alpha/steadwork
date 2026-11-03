@@ -74,7 +74,7 @@ For local Terraform commands, export `TF_TOKEN_app_terraform_io` with the HCP Te
 
 ## Deploy and promote
 
-On a push to `main`, `ci.yml` runs all test jobs. Only after full validation succeeds does it build and push an image with the UTC tag format `YYYYMMDD-HHMMSS-shortsha`, for example `20260818-163457-83242da`, and deploy its digest to Render development. Once `/api/health/` responds successfully, CI points the mutable `dev` tag to that image. If dev deployment or its health check fails, `dev` remains on the last successful image.
+On a push to `main`, `ci.yml` runs all test jobs. Only after full validation succeeds does it build and push an image with the UTC tag format `YYYYMMDD-HHMMSS-shortsha`, for example `20260818-163457-83242da`, and deploy its digest to Render development. Once `/api/health/` responds successfully, CI points the mutable `dev` tag to that image. If dev deployment or its health check fails, `dev` remains on the last successful image. Successful dev deployments print the site URL in the GitHub Actions run summary.
 
 To deploy the latest successful dev image to production, run the workflow from **Actions → Promote image to production → Run workflow** and leave the optional image tag blank. Or from the terminal:
 
@@ -82,7 +82,7 @@ To deploy the latest successful dev image to production, run the workflow from *
 make deploy ENV=prod
 ```
 
-The production workflow resolves `dev` to its current image digest before applying Terraform, then checks the production health endpoint. After success, it moves the mutable `prod` pointer to the deployed image. GitHub Actions performs the apply after the `production` Environment's required reviewers approve.
+The production workflow resolves `dev` to its current image digest before applying Terraform, then checks the production health endpoint. After success, it moves the mutable `prod` pointer to the deployed image. GitHub Actions performs the apply after the `production` Environment's required reviewers approve. Successful production deployments print the site URL in the workflow run summary.
 
 For a rollback, enter a retained timestamped image tag in the Actions input or run:
 

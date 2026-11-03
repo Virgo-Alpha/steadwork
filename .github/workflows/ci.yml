@@ -21,22 +21,22 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '22'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           cache-dependency-glob: backend/uv.lock
@@ -60,15 +60,15 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           cache-dependency-glob: backend/uv.lock
@@ -93,12 +93,12 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '22'
           cache: npm
@@ -107,12 +107,12 @@ jobs:
             e2e/package-lock.json
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           cache-dependency-glob: backend/uv.lock
@@ -174,7 +174,7 @@ jobs:
       RENDER_WAIT_FOR_DEPLOY_COMPLETION: "true"
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
@@ -257,3 +257,10 @@ jobs:
           docker buildx imagetools create --prefer-index=false \
             --tag "$IMAGE_URL:dev" "$IMAGE_URL@$IMAGE_DIGEST"
           echo "Deployed $IMAGE_URL:$IMAGE_TAG to dev and updated $IMAGE_URL:dev."
+
+      - name: Publish development URL
+        env:
+          SERVICE_URL: ${{ steps.deploy.outputs.service_url }}
+        run: |
+          echo "## Development deployment successful" >> "$GITHUB_STEP_SUMMARY"
+          echo "Application: [$SERVICE_URL]($SERVICE_URL)" >> "$GITHUB_STEP_SUMMARY"

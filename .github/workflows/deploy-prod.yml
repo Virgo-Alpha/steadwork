@@ -34,7 +34,7 @@ jobs:
       GHCR_REPOSITORY: ${{ github.repository }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
@@ -118,3 +118,10 @@ jobs:
           docker buildx imagetools create --prefer-index=false \
             --tag "$IMAGE_URL:prod" "$IMAGE_URL@$IMAGE_DIGEST"
           echo "Deployed $IMAGE_URL:$IMAGE_TAG to production and updated $IMAGE_URL:prod."
+
+      - name: Publish production URL
+        env:
+          SERVICE_URL: ${{ steps.deploy.outputs.service_url }}
+        run: |
+          echo "## Production deployment successful" >> "$GITHUB_STEP_SUMMARY"
+          echo "Application: [$SERVICE_URL]($SERVICE_URL)" >> "$GITHUB_STEP_SUMMARY"
