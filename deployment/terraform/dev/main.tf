@@ -1,3 +1,11 @@
+terraform {
+  backend "remote" {
+    workspaces {
+      name = "steadwork-dev"
+    }
+  }
+}
+
 module "environment" {
   source                = "../environment"
   terraform_organization = var.terraform_organization

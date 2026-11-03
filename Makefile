@@ -89,25 +89,25 @@ apply-dev:
 	@test -n "$(TF_CLOUD_ORGANIZATION)" || { printf '%s\n' 'Set TF_CLOUD_ORGANIZATION to your HCP Terraform organization.' >&2; exit 2; }
 	@test -n "$(IMAGE_REF)" || { printf '%s\n' 'IMAGE_REF must be an immutable image reference, e.g. ghcr.io/owner/repo@sha256:...'; exit 2; }
 	@set -eu; image_url=$${IMAGE_REF%@*}; image_digest=$${IMAGE_REF##*@}; \
-	terraform -chdir=deployment/terraform/bootstrap init -backend-config="organization=$(TF_CLOUD_ORGANIZATION)" -backend-config="workspaces.name=steadwork-bootstrap"; \
+	terraform -chdir=deployment/terraform/bootstrap init -backend-config="organization=$(TF_CLOUD_ORGANIZATION)"; \
 	terraform -chdir=deployment/terraform/bootstrap apply -var="project_name=steadwork"; \
-	terraform -chdir=deployment/terraform/dev init -backend-config="organization=$(TF_CLOUD_ORGANIZATION)" -backend-config="workspaces.name=steadwork-dev"; \
+	terraform -chdir=deployment/terraform/dev init -backend-config="organization=$(TF_CLOUD_ORGANIZATION)"; \
 	terraform -chdir=deployment/terraform/dev apply -var="terraform_organization=$(TF_CLOUD_ORGANIZATION)" -var="image_url=$$image_url" -var="image_digest=$$image_digest"
 
 destroy-dev:
 	@test -n "$(TF_CLOUD_ORGANIZATION)" || { printf '%s\n' 'Set TF_CLOUD_ORGANIZATION to your HCP Terraform organization.' >&2; exit 2; }
-	terraform -chdir=deployment/terraform/dev init -backend-config="organization=$(TF_CLOUD_ORGANIZATION)" -backend-config="workspaces.name=steadwork-dev"
+	terraform -chdir=deployment/terraform/dev init -backend-config="organization=$(TF_CLOUD_ORGANIZATION)"
 	terraform -chdir=deployment/terraform/dev destroy -var="terraform_organization=$(TF_CLOUD_ORGANIZATION)" -var="image_url=ghcr.io/placeholder/steadwork" -var="image_digest=sha256:0000000000000000000000000000000000000000000000000000000000000000"
 
 destroy-prod:
 	@test -n "$(TF_CLOUD_ORGANIZATION)" || { printf '%s\n' 'Set TF_CLOUD_ORGANIZATION to your HCP Terraform organization.' >&2; exit 2; }
 	@test "$(CONFIRM_PROD_DESTROY)" = "steadwork-production" || { printf '%s\n' 'This deletes the production app and database. Rerun with CONFIRM_PROD_DESTROY=steadwork-production after taking a database backup.' >&2; exit 2; }
-	terraform -chdir=deployment/terraform/prod init -backend-config="organization=$(TF_CLOUD_ORGANIZATION)" -backend-config="workspaces.name=steadwork-prod"
+	terraform -chdir=deployment/terraform/prod init -backend-config="organization=$(TF_CLOUD_ORGANIZATION)"
 	terraform -chdir=deployment/terraform/prod destroy -var="terraform_organization=$(TF_CLOUD_ORGANIZATION)" -var="image_url=ghcr.io/placeholder/steadwork" -var="image_digest=sha256:0000000000000000000000000000000000000000000000000000000000000000"
 
 destroy-bootstrap:
 	@test -n "$(TF_CLOUD_ORGANIZATION)" || { printf '%s\n' 'Set TF_CLOUD_ORGANIZATION to your HCP Terraform organization.' >&2; exit 2; }
-	terraform -chdir=deployment/terraform/bootstrap init -backend-config="organization=$(TF_CLOUD_ORGANIZATION)" -backend-config="workspaces.name=steadwork-bootstrap"
+	terraform -chdir=deployment/terraform/bootstrap init -backend-config="organization=$(TF_CLOUD_ORGANIZATION)"
 	terraform -chdir=deployment/terraform/bootstrap destroy -var="project_name=steadwork"
 
 # One-command local setup: dependencies, SQLite schema, then both services.

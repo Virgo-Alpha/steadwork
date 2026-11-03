@@ -6,7 +6,11 @@ terraform {
       version = "~> 1.9.1"
     }
   }
-  backend "remote" {}
+  backend "remote" {
+    workspaces {
+      name = "steadwork-bootstrap"
+    }
+  }
 }
 
 provider "render" {}

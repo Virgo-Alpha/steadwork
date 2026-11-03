@@ -212,8 +212,7 @@ jobs:
       - name: Create Render project and environments
         run: |
           terraform -chdir=deployment/terraform/bootstrap init \
-            -backend-config="organization=$TF_CLOUD_ORGANIZATION" \
-            -backend-config="workspaces.name=steadwork-bootstrap"
+            -backend-config="organization=$TF_CLOUD_ORGANIZATION"
           terraform -chdir=deployment/terraform/bootstrap apply -auto-approve \
             -var="project_name=steadwork"
 
@@ -224,8 +223,7 @@ jobs:
           IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
         run: |
           terraform -chdir=deployment/terraform/dev init \
-            -backend-config="organization=$TF_CLOUD_ORGANIZATION" \
-            -backend-config="workspaces.name=steadwork-dev"
+            -backend-config="organization=$TF_CLOUD_ORGANIZATION"
           terraform -chdir=deployment/terraform/dev apply -auto-approve \
             -var="terraform_organization=$TF_CLOUD_ORGANIZATION" \
             -var="image_url=$IMAGE_URL" \

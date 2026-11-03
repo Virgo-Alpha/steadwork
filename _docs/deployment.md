@@ -90,8 +90,7 @@ Terraform uses the `remote` HCP Terraform backend. Initialize and apply the base
 
 ```sh
 terraform -chdir=deployment/terraform/bootstrap init \
-  -backend-config="organization=$TF_CLOUD_ORGANIZATION" \
-  -backend-config="workspaces.name=steadwork-bootstrap"
+  -backend-config="organization=$TF_CLOUD_ORGANIZATION"
 terraform -chdir=deployment/terraform/bootstrap apply -var="project_name=steadwork"
 ```
 
