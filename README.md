@@ -67,6 +67,9 @@ Render is managed with Terraform. After all CI tests pass, GitHub Actions publis
 
 ## CI/CD
 
+<img width="1900" height="963" alt="image" src="https://github.com/user-attachments/assets/bad0a33f-47ea-4ac9-b777-d336c16b226d" />
+
+
 ### GitHub Actions
 
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on pull requests, pushes to `main`, and manual `workflow_dispatch`. Frontend and backend test jobs run in parallel. Full validation then checks Compose configuration, builds the app image, installs dependencies and runs `make test`. The full validation job needs the four E2E Actions secrets named above; on fork pull requests it is skipped because repository secrets are unavailable, while the parallel frontend and backend jobs still run. A successful push to `main` then builds a tagged image and deploys it to Render development. Production promotion is handled by [the manual deployment workflow](.github/workflows/deploy-prod.yml) after the protected `production` GitHub Environment approves it. See the [deployment guide](_docs/deployment.md) for the required secrets/variables and setup.
