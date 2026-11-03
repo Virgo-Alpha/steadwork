@@ -28,7 +28,7 @@ flowchart TD
 
 ## One-time setup
 
-1. Create an HCP Terraform organization and a user/team API token. The configured remote backend creates three workspaces: `steadwork-bootstrap`, `steadwork-dev`, and `steadwork-prod`.
+1. Create an HCP Terraform organization and a user/team API token. This setup uses three workspaces: `steadwork-bootstrap`, `steadwork-dev`, and `steadwork-prod`.
 2. In Render, create an API key and copy the owner ID from the account or team settings. The provider creates the Render project and development/production environments on the first apply.
 3. Add the repository-level GitHub Actions secrets and variables listed below. Both deployment jobs need the Render and HCP Terraform credentials. If you prefer environment-scoped secrets, add the same `RENDER_API_KEY` and `TF_API_TOKEN` to both the `development` and `production` GitHub Environments; putting them only in `production` will prevent the dev deployment from authenticating.
 4. In GitHub repository settings, create a `production` Environment and configure required reviewers. The environment gate is separate from Render's protected environment marker and is what pauses the workflow for human approval.
@@ -36,6 +36,22 @@ flowchart TD
 6. Review Render plan selections and region before enabling deployments. The Terraform defaults use a `starter` web plan and `basic_256mb` PostgreSQL plan; verify current prices and availability for your account. `free` Postgres is not used because it is temporary and unsuitable for persistent production data.
 
 The Render project is created in the Render account/team selected by `RENDER_OWNER_ID`. A web service is named `steadwork-development` or `steadwork-production`; the default allowed hosts match those `.onrender.com` names. Set `allowed_hosts` if you use a custom domain. Application secrets, including `DJANGO_SECRET_KEY` and the database connection string, are set on Render; do not put them in a checked-in tfvars file.
+
+### HCP Terraform workspace setup
+
+Create or configure all three workspaces as follows:
+
+| Workspace | Workflow | Execution mode |
+| --- | --- | --- |
+| `steadwork-bootstrap` | CLI-driven | Local |
+| `steadwork-dev` | CLI-driven | Local |
+| `steadwork-prod` | CLI-driven | Local |
+
+Choose **CLI-driven workflow** when creating each workspace. Do not connect a VCS repository: GitHub Actions checks out the code and runs Terraform CLI itself. Do not choose API-driven; this project does not upload configuration or start runs through the HCP Terraform API. The CLI workflow and execution mode are separate settings.
+
+The failed bootstrap `terraform init` already created `steadwork-bootstrap`; open it in HCP Terraform and change **Settings → General → Execution Mode** to **Local**. Create `steadwork-dev` and `steadwork-prod` in HCP Terraform first using the CLI-driven workflow, then set each to **Local** before the next CI run. This avoids having a new workspace inherit the organization's default Remote execution mode when Terraform initializes it.
+
+With Local execution, Terraform operations run on the GitHub Actions runner and HCP Terraform continues to store the remote state. The runner's Terraform version must satisfy the configuration requirement (`>= 1.6.0`). HCP workspace variables and variable sets are not used in Local mode: the Render credentials come from GitHub Actions secrets, and per-run Terraform values come from the workflow/CLI. The GitHub Environment approval still gates the production job; the workflow's `-auto-approve` flag controls the Terraform apply after that approval. Leave the HCP workspace working directory and VCS settings unset.
 
 ## GitHub Actions secrets and variables
 
@@ -91,7 +107,7 @@ Terraform uses the `remote` HCP Terraform backend. Initialize and apply the base
 ```sh
 terraform -chdir=deployment/terraform/bootstrap init \
   -backend-config="organization=$TF_CLOUD_ORGANIZATION"
-terraform -chdir=deployment/terraform/bootstrap apply -var="project_name=steadwork"
+terraform -chdir=deployment/terraform/bootstrap apply
 ```
 
 CI then creates/updates the app and database in separate workspaces. To remove development resources:
