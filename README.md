@@ -74,6 +74,8 @@ Render is managed with Terraform. After all CI tests pass, GitHub Actions publis
 
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on pull requests, pushes to `main`, and manual `workflow_dispatch`. Frontend and backend test jobs run in parallel. Full validation then checks Compose configuration, builds the app image, installs dependencies and runs `make test`. The full validation job needs the four E2E Actions secrets named above; on fork pull requests it is skipped because repository secrets are unavailable, while the parallel frontend and backend jobs still run. A successful push to `main` then builds a tagged image and deploys it to Render development. Production promotion is handled by [the manual deployment workflow](.github/workflows/deploy-prod.yml) after the protected `production` GitHub Environment approves it. See the [deployment guide](_docs/deployment.md) for the required secrets/variables and setup.
 
+<img width="1899" height="463" alt="image" src="https://github.com/user-attachments/assets/35752a8c-ebf0-4e8c-af76-208b73b70c8c" />
+
 ## Observability and Monitority
 TODO: Create observability_and_monitoring.md and add telemetry using OpenTelemetry, Prometheus and Grafana
 TODO: A key user journey is instrumented with metrics, traces, and structured logs that share a trace ID; no customer data or credentials are sent to telemetry; and the signals are collected, stored, and viewable in a UI.
