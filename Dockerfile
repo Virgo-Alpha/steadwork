@@ -32,4 +32,4 @@ ENV PORT=10000
 EXPOSE 10000
 # The API currently keeps bearer token sessions in process memory. Use one
 # worker so login and authenticated requests see the same token store.
-CMD ["sh", "-c", "exec uv run --no-sync gunicorn steadwork.wsgi:application --bind 0.0.0.0:${PORT:-10000} --workers 1 --access-logfile - --error-logfile -"]
+CMD ["sh", "-c", "uv run --no-sync alembic upgrade head && exec uv run --no-sync gunicorn steadwork.wsgi:application --bind 0.0.0.0:${PORT:-10000} --workers 1 --access-logfile - --error-logfile -"]
