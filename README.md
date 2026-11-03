@@ -1,6 +1,10 @@
 # Steadwork Tech Job Board
 
-Steadwork is a responsive job board for technology job seekers, hiring companies and recruiters, public visitors, and platform administrators. Candidates can discover openings, save jobs, apply and follow application status; employers can publish and manage jobs and review applicants; public visitors can browse jobs and companies. Administrators are an intended product role, but their platform moderation and management capabilities are deferred and unimplemented. This repository contains a working MVP and its contributor workflow; some confirmed product requirements remain unimplemented, as listed below.
+Steadwork is a responsive job board for technology job seekers, hiring companies and recruiters, public visitors, and platform administrators. Candidates can discover openings, save jobs, apply and follow application status; employers can publish and manage jobs and review applicants; public visitors can browse jobs and companies. Administrators are an intended product role, but their platform moderation and management capabilities are deferred and unimplemented. This repository contains a working MVP and its contributor workflow.
+
+For the deployed sites, see below:
+- Development: https://steadwork-development.onrender.com/
+- Production: https://steadwork-production.onrender.com/
 
 ## Project specifications
 
