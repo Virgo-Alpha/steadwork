@@ -11,7 +11,7 @@ variable "web_plan" {
 }
 variable "postgres_plan" {
   type    = string
-  default = "basic_256mb"
+  default = "free"
 }
 variable "allowed_hosts" {
   type    = string
