@@ -32,4 +32,10 @@ module "environment" {
   allowed_hosts            = var.allowed_hosts
 }
 
+output "service_id" { value = module.environment.service_id }
 output "service_url" { value = module.environment.service_url }
+
+output "database_url" {
+  value     = module.environment.database_url
+  sensitive = true
+}

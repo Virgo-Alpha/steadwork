@@ -21,6 +21,9 @@ jobs:
     name: Deploy selected image to Render production
     runs-on: ubuntu-24.04
     environment: production
+    concurrency:
+      group: steadwork-shared-free-db-deploy
+      cancel-in-progress: false
     permissions:
       contents: read
       packages: write
@@ -29,7 +32,8 @@ jobs:
       TF_CLOUD_ORGANIZATION: ${{ vars.TF_CLOUD_ORGANIZATION }}
       RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
       RENDER_OWNER_ID: ${{ vars.RENDER_OWNER_ID }}
-      RENDER_WAIT_FOR_DEPLOY_COMPLETION: "true"
+      DJANGO_ALLOWED_HOSTS: steadwork-production.onrender.com
+      RENDER_CLI_VERSION: "2.34.0"
       IMAGE_TAG_INPUT: ${{ inputs.image_tag }}
       GHCR_REPOSITORY: ${{ github.repository }}
     steps:
@@ -48,6 +52,19 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Install pinned Render CLI
+        run: |
+          set -euo pipefail
+          archive="cli_${RENDER_CLI_VERSION}_linux_amd64.zip"
+          url="https://github.com/render-oss/cli/releases/download/v${RENDER_CLI_VERSION}/${archive}"
+          curl --fail --silent --show-error --location "$url" --output "$RUNNER_TEMP/$archive"
+          mkdir "$RUNNER_TEMP/render-cli"
+          unzip -q "$RUNNER_TEMP/$archive" -d "$RUNNER_TEMP/render-cli"
+          binary="$(find "$RUNNER_TEMP/render-cli" -maxdepth 1 -type f -name 'cli_v*' -print -quit)"
+          test -n "$binary"
+          sudo install -m 0755 "$binary" /usr/local/bin/render
+          render --version
 
       - name: Resolve requested tag to an immutable image digest
         id: image
@@ -90,7 +107,24 @@ jobs:
             -var="image_url=$IMAGE_URL" \
             -var="image_digest=$IMAGE_DIGEST"
           service_url="$(terraform -chdir=deployment/terraform/prod output -raw service_url)"
+          service_id="$(terraform -chdir=deployment/terraform/prod output -raw service_id)"
+          database_url="$(terraform -chdir=deployment/terraform/prod output -raw database_url)"
+          echo "::add-mask::$database_url"
           echo "service_url=$service_url" >> "$GITHUB_OUTPUT"
+          echo "service_id=$service_id" >> "$GITHUB_OUTPUT"
+          printf 'DATABASE_URL=%s\n' "$database_url" >> "$GITHUB_ENV"
+
+      - name: Synchronize production environment variables through Render API
+        env:
+          RENDER_SERVICE_ID: ${{ steps.deploy.outputs.service_id }}
+        run: python3 .github/scripts/sync_render_env.py
+
+      - name: Deploy immutable image to production through Render CLI
+        env:
+          RENDER_SERVICE_ID: ${{ steps.deploy.outputs.service_id }}
+          IMAGE_URL: ${{ steps.image.outputs.image_url }}
+          IMAGE_DIGEST: ${{ steps.image.outputs.image_digest }}
+        run: render deploys create "$RENDER_SERVICE_ID" --image "$IMAGE_URL@$IMAGE_DIGEST" --wait --confirm --output json
 
       - name: Verify production is healthy
         env:

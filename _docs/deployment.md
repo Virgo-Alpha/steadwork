@@ -1,6 +1,6 @@
 # Render deployment
 
-Steadwork deploys to Render through Terraform. GitHub Actions builds one immutable container image after every required CI job passes and deploys it to development. After the dev health check passes, CI points the mutable `dev` tag at that exact image. The manually dispatched production workflow defaults to the image referenced by `dev`; an optional timestamped tag selects a rollback image. Production uses a GitHub Environment approval gate. Terraform Cloud (HCP Terraform) stores and locks remote state; the Render Terraform provider manages the Render project, its two environments, a PostgreSQL database, and the web service in each environment.
+Steadwork deploys to Render through Terraform and the Render CLI/API. Terraform Cloud (HCP Terraform) stores and locks remote state; Terraform manages the Render project, its two environments, the shared PostgreSQL database, and initial web-service creation. GitHub Actions builds an immutable container image and deploys it to development through the Render CLI after required CI jobs pass. After the dev health check passes, CI points the mutable `dev` tag at that exact image. The manually dispatched production workflow defaults to the image referenced by `dev`; an optional timestamped tag selects a rollback image. Production uses a GitHub Environment approval gate.
 
 `render.yaml` is intentionally not used: it would define a second source of truth for services Terraform already manages. The container image is pushed to GHCR and built for `linux/amd64`. Workflows resolve a tag to its digest and deploy by digest, so a mutable tag cannot change the image midway through deployment. Timestamped tags remain available for diagnosis and rollback; `dev` and `prod` are convenience pointers to the last healthy deployment in each environment.
 
@@ -12,8 +12,9 @@ flowchart TD
     B --> C[Full validation and Compose E2E]
     C -->|all pass| D[Build linux/amd64 image]
     D --> E[Push GHCR tag YYYYMMDD-HHMMSS-shortsha]
-    E --> F[Terraform creates or updates Render development]
-    F --> G[Health check GET /api/health/]
+    E --> F[Terraform provisions development resources]
+    F --> F2[Render API syncs settings and CLI deploys image]
+    F2 --> G[Health check GET /api/health/]
     G --> H[Update mutable GHCR dev pointer]
     H --> I[Manual production workflow dispatch]
     I --> J{Optional timestamped rollback tag?}
@@ -21,7 +22,7 @@ flowchart TD
     J -->|Yes| L[Resolve selected tag to digest]
     K --> M{GitHub production environment approval}
     L --> M
-    M -->|approved| N[Terraform deploys selected digest to production]
+    M -->|approved| N[Terraform provisions production service; CLI deploys selected digest]
     N --> O[Health check GET /api/health/]
     O --> P[Update mutable GHCR prod pointer]
 ```
@@ -36,6 +37,14 @@ flowchart TD
 6. Review Render plan selections and region before enabling deployments. The Terraform defaults use `free` web and PostgreSQL plans. **Because Render allows only one active free Postgres database per workspace, production deliberately reuses the development database to avoid a second database charge. Development and production therefore share the same data and schema.** Both services must remain in the same region, and the Render project must allow cross-environment network traffic. Free Postgres is intended for testing and hobby projects: it is limited to 1 GB, has no backups, and expires after 30 days unless upgraded.
 
 This shared database is a free-tier workaround, not the intended long-term production topology. When a paid production database is available, remove the `terraform_remote_state.development` data source and `existing_database_url` argument from `deployment/terraform/prod/main.tf`; the environment module will then create a separate production database. Before separating, plan and apply production database creation, migrate any production data that should be retained, and verify that the production service points to its own database.
+
+### Why service updates use the Render CLI/API
+
+The repository pins `render-oss/render` to `~> 1.9.1`. That provider sends a `maintenance_mode` field during web-service updates even when it is unset. Render rejects the update for a free web service, so changing its image or environment variables through `terraform apply` fails. Terraform therefore creates the web service and records its ID, but uses `lifecycle { ignore_changes = all }` to avoid later update calls. The deployment workflows use the Render API to synchronize desired environment variables and the Render CLI to deploy the selected immutable image digest. [This provider issue](https://github.com/render-oss/terraform-provider-render/issues/80) documents the free-plan update failure.
+
+`.github/scripts/sync_render_env.py` uses Render's [per-variable API endpoint](https://api-docs.render.com/reference/update-env-var) to update only `DATABASE_URL`, `STEADWORK_STORE`, `DJANGO_DEBUG`, and `DJANGO_ALLOWED_HOSTS`. This leaves the generated `DJANGO_SECRET_KEY` and any other service variables untouched. It never prints variable values, and the workflow masks `DATABASE_URL` before passing it to later steps. The Render CLI is pinned to `2.34.0` and deploys the exact image digest with [`deploys create`](https://render.com/docs/cli-reference); update that version deliberately when changing the CLI.
+
+Because dev and prod share the one free database, both deployment jobs use the same GitHub Actions concurrency group. This serializes migrations and deployment steps across environments.
 
 The Render project is created in the Render account/team selected by `RENDER_OWNER_ID`. A web service is named `steadwork-development` or `steadwork-production`; the default allowed hosts match those `.onrender.com` names. Set `allowed_hosts` if you use a custom domain. Application secrets, including `DJANGO_SECRET_KEY` and the database connection string, are set on Render; do not put them in a checked-in tfvars file.
 
@@ -76,7 +85,7 @@ For local Terraform commands, export `TF_TOKEN_app_terraform_io` with the HCP Te
 
 ## Deploy and promote
 
-On a push to `main`, `ci.yml` runs all test jobs. Only after full validation succeeds does it build and push an image with the UTC tag format `YYYYMMDD-HHMMSS-shortsha`, for example `20260818-163457-83242da`, and deploy its digest to Render development. Once `/api/health/` responds successfully, CI points the mutable `dev` tag to that image. If dev deployment or its health check fails, `dev` remains on the last successful image. Successful dev deployments print the site URL in the GitHub Actions run summary.
+On a push to `main`, `ci.yml` runs all test jobs. Only after full validation succeeds does it build and push an image with the UTC tag format `YYYYMMDD-HHMMSS-shortsha`, for example `20260818-163457-83242da`. Terraform provisions or refreshes infrastructure without updating an existing free web service; the Render API synchronizes its environment variables and the Render CLI deploys the image digest. Once `/api/health/` responds successfully, CI points the mutable `dev` tag to that image. If the deploy or health check fails, `dev` remains on the last successful image. Successful dev deployments print the site URL in the GitHub Actions run summary.
 
 To deploy the latest successful dev image to production, run the workflow from **Actions → Promote image to production → Run workflow** and leave the optional image tag blank. Or from the terminal:
 
@@ -84,7 +93,7 @@ To deploy the latest successful dev image to production, run the workflow from *
 make deploy ENV=prod
 ```
 
-The production workflow resolves `dev` to its current image digest before applying Terraform, then checks the production health endpoint. After success, it moves the mutable `prod` pointer to the deployed image. GitHub Actions performs the apply after the `production` Environment's required reviewers approve. Successful production deployments print the site URL in the workflow run summary.
+The production workflow resolves `dev` (or the requested rollback tag) to its image digest, applies infrastructure changes, synchronizes environment variables through the Render API, and deploys through the Render CLI. It then checks the production health endpoint. After success, it moves the mutable `prod` pointer to the deployed image. GitHub Actions performs these steps after the `production` Environment's required reviewers approve. Successful production deployments print the site URL in the workflow run summary.
 
 For a rollback, enter a retained timestamped image tag in the Actions input or run:
 
@@ -100,7 +109,7 @@ For a local development infrastructure apply, first ensure your Terraform and Re
 make apply-dev IMAGE_REF=ghcr.io/owner/steadwork@sha256:...
 ```
 
-Terraform's environment module accepts the service/database plan, region and allowed-host settings as variables; override defaults with `-var` arguments in direct Terraform use or adjust the environment root variables before applying. Inspect every Terraform plan before approving any manual apply.
+Terraform's environment module accepts the service/database plan, region and allowed-host settings as variables; override defaults with `-var` arguments in direct Terraform use or adjust the environment root variables before applying. Terraform creates the free web service but intentionally ignores later changes to it. Deploy new images through the GitHub Actions workflows or Render CLI; a local Terraform apply alone will not update an existing web service.
 
 ## Terraform lifecycle and teardown
 
@@ -112,19 +121,19 @@ terraform -chdir=deployment/terraform/bootstrap init \
 terraform -chdir=deployment/terraform/bootstrap apply
 ```
 
-CI then creates/updates the app and database in separate workspaces. To remove development resources:
+CI then provisions development and production app resources in separate workspaces. The development workspace owns the shared Postgres database; production references its sensitive connection URL through Terraform remote state. Do not destroy development while production still uses the shared database. To remove development resources after both services are no longer needed:
 
 ```sh
 make destroy-dev TF_CLOUD_ORGANIZATION=your-hcp-org
 ```
 
-To remove production, first take and verify a database backup. Then run:
+To remove only the production web service, run:
 
 ```sh
 make destroy-prod TF_CLOUD_ORGANIZATION=your-hcp-org CONFIRM_PROD_DESTROY=steadwork-production
 ```
 
-That command deletes the production web service and database. After both environment states have been destroyed, remove the empty Render project and its environments with:
+That command deletes the production web service. The shared database belongs to the development workspace and is not deleted by the production teardown. Back up any data you need before destroying the development workspace. After both web services and the development database have been destroyed, remove the empty Render project and its environments with:
 
 ```sh
 make destroy-bootstrap TF_CLOUD_ORGANIZATION=your-hcp-org
@@ -134,8 +143,8 @@ Terraform state remains in HCP Terraform. Do not remove HCP Terraform workspaces
 
 ## Operational notes
 
-- Migrations run as the Render pre-deploy command. The container runs Gunicorn, binds to Render's `PORT` (default `10000`), and logs requests/errors to stdout/stderr. Compose explicitly runs migrations and binds to its local port, preserving the existing local workflow.
+- Migrations run in the container startup command before Gunicorn because Render pre-deploy commands are unavailable on free web services. The container binds to Render's `PORT` (default `10000`) and logs requests/errors to stdout/stderr. Compose explicitly runs migrations and binds to its local port, preserving the existing local workflow.
 - Django `DEBUG` is disabled in Render. Terraform asks Render to generate `DJANGO_SECRET_KEY`; production refuses to start with the development fallback key.
-- Render's health check uses `/api/health/`. The Terraform provider is configured to wait for deploy completion; verify the service URL and health endpoint in workflow output and Render logs.
+- Render's health check uses `/api/health/`. The Render CLI waits for deploy completion, then GitHub Actions verifies the service URL and health endpoint.
 - Terraform state contains sensitive database connection information. HCP Terraform remote state access must be restricted; never commit `.tfstate`, `.tfvars`, plans, or credentials.
 - Database restore, schema rollback, domain/DNS setup, and image retention are operational responsibilities. Retain the newest 10 timestamped builds plus any older versions referenced by the `dev` or `prod` pointers; periodically delete older GHCR package versions from the package's version settings. Moving or deleting a tag alone does not guarantee storage is reclaimed; remove unneeded package versions, while accounting for layers still shared by retained images. Deleting an image version is destructive, so check that no deployed environment or rollback plan still needs it. Keep a tested database backup before destructive changes or risky schema migrations.

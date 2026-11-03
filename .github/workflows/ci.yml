@@ -162,6 +162,9 @@ jobs:
     runs-on: ubuntu-24.04
     needs: [full-validation]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    concurrency:
+      group: steadwork-shared-free-db-deploy
+      cancel-in-progress: false
     permissions:
       contents: read
       packages: write
@@ -171,7 +174,8 @@ jobs:
       TF_CLOUD_ORGANIZATION: ${{ vars.TF_CLOUD_ORGANIZATION }}
       RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
       RENDER_OWNER_ID: ${{ vars.RENDER_OWNER_ID }}
-      RENDER_WAIT_FOR_DEPLOY_COMPLETION: "true"
+      DJANGO_ALLOWED_HOSTS: steadwork-development.onrender.com
+      RENDER_CLI_VERSION: "2.34.0"
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
@@ -216,6 +220,19 @@ jobs:
           terraform -chdir=deployment/terraform/bootstrap apply -auto-approve \
             -var="project_name=steadwork"
 
+      - name: Install pinned Render CLI
+        run: |
+          set -euo pipefail
+          archive="cli_${RENDER_CLI_VERSION}_linux_amd64.zip"
+          url="https://github.com/render-oss/cli/releases/download/v${RENDER_CLI_VERSION}/${archive}"
+          curl --fail --silent --show-error --location "$url" --output "$RUNNER_TEMP/$archive"
+          mkdir "$RUNNER_TEMP/render-cli"
+          unzip -q "$RUNNER_TEMP/$archive" -d "$RUNNER_TEMP/render-cli"
+          binary="$(find "$RUNNER_TEMP/render-cli" -maxdepth 1 -type f -name 'cli_v*' -print -quit)"
+          test -n "$binary"
+          sudo install -m 0755 "$binary" /usr/local/bin/render
+          render --version
+
       - name: Deploy the image and database to Render development
         id: deploy
         env:
@@ -229,7 +246,24 @@ jobs:
             -var="image_url=$IMAGE_URL" \
             -var="image_digest=$IMAGE_DIGEST"
           service_url="$(terraform -chdir=deployment/terraform/dev output -raw service_url)"
+          service_id="$(terraform -chdir=deployment/terraform/dev output -raw service_id)"
+          database_url="$(terraform -chdir=deployment/terraform/dev output -raw database_url)"
+          echo "::add-mask::$database_url"
           echo "service_url=$service_url" >> "$GITHUB_OUTPUT"
+          echo "service_id=$service_id" >> "$GITHUB_OUTPUT"
+          printf 'DATABASE_URL=%s\n' "$database_url" >> "$GITHUB_ENV"
+
+      - name: Synchronize development environment variables through Render API
+        env:
+          RENDER_SERVICE_ID: ${{ steps.deploy.outputs.service_id }}
+        run: python3 .github/scripts/sync_render_env.py
+
+      - name: Deploy immutable image to development through Render CLI
+        env:
+          RENDER_SERVICE_ID: ${{ steps.deploy.outputs.service_id }}
+          IMAGE_URL: ${{ steps.image.outputs.image_url }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: render deploys create "$RENDER_SERVICE_ID" --image "$IMAGE_URL@$IMAGE_DIGEST" --wait --confirm --output json
 
       - name: Verify development is healthy
         env:

@@ -18,6 +18,7 @@ module "environment" {
   allowed_hosts         = var.allowed_hosts
 }
 
+output "service_id" { value = module.environment.service_id }
 output "service_url" { value = module.environment.service_url }
 
 # Prod consumes this sensitive output while the Render free-tier limit requires

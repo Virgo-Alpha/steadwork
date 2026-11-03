@@ -8,8 +8,6 @@ terraform {
   }
 }
 
-provider "render" {}
-
 data "terraform_remote_state" "bootstrap" {
   backend = "remote"
   config = {
@@ -54,8 +52,6 @@ resource "render_web_service" "app" {
   region             = var.region
   environment_id     = local.environment_id
   health_check_path  = "/api/health/"
-  pre_deploy_command = "uv run --no-sync alembic upgrade head"
-
   runtime_source = {
     image = {
       image_url = var.image_url
@@ -70,6 +66,17 @@ resource "render_web_service" "app" {
     DJANGO_SECRET_KEY = { generate_value = true }
     DJANGO_ALLOWED_HOSTS = { value = var.allowed_hosts }
   }
+
+  # The Render Terraform provider currently includes maintenance_mode in
+  # updates even when unset, which Render rejects for free services. Terraform
+  # creates the service; CI uses Render's API/CLI for later changes and deploys.
+  lifecycle {
+    ignore_changes = all
+  }
+}
+
+output "service_id" {
+  value = render_web_service.app.id
 }
 
 output "service_url" {
