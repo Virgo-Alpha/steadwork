@@ -154,10 +154,10 @@ The proposed base path is `/api`; resources use JSON, with a separate multipart 
 
 ## 13. Backend completion and unresolved details
 
-- Production authentication, verification, company team invitations, admin moderation and email delivery remain future backend work in the backend plan, while remaining confirmed product requirements.
-- Section 12's baseline API map omits company registration/profile operations and the team, CV, moderation, and external-click routes. Section 14 now specifies proposed contracts for team management, CV metadata, moderation, and external clicks, pending decisions #26–#28; company registration/profile operations still need a separate contract.
+- Registration, login, email verification, password reset, candidate recommendations, and current candidate/employer endpoints are implemented. Verification and reset mail use the configured Django email backend; hosted environments must configure SMTP. Company team invitations and admin moderation remain future backend work.
+- Company registration now has an API contract and creates the company plus its initial recruiter membership. Company profile editing, team management, file-backed CV uploads, moderation, and external-click routes remain deferred; Section 14 records proposed contracts, with decisions #26–#28 still pending where noted.
 - Request/response schemas, detailed validation rules and error formats are not supplied by the source documents.
-- Finalize the asynchronous email technology.
+- Configure SMTP for hosted email and decide whether email delivery needs an asynchronous worker at production scale.
 - Enforce validation, duplicate protection, permissions, lifecycle/deadline rules and audit logging on the server.
 
 ## 14. Deferred persistence and API contracts

@@ -153,7 +153,7 @@ class SQLAlchemyStoreRepository:
                         ))
                         next_position += 1
                 self.session.flush()
-        users = [User(row.id, row.email, row.role, row.password_hash) for row in self.session.scalars(select(UserRecord).order_by(UserRecord.position, UserRecord.id)).all()]
+        users = [User(row.id, row.email, row.role, row.password_hash, row.name, row.email_verified, row.auth_version) for row in self.session.scalars(select(UserRecord).order_by(UserRecord.position, UserRecord.id)).all()]
         companies = [Company(row.id, row.name, row.description, row.website, row.logo, row.accent) for row in self.session.scalars(select(CompanyRecord).order_by(CompanyRecord.position, CompanyRecord.id)).all()]
         jobs = [
             Job(row.id, row.company_id, row.title, row.description, row.location, row.salary_min, row.salary_max,
@@ -190,7 +190,7 @@ class SQLAlchemyStoreRepository:
             self.session.execute(delete(model))
         self.session.flush()
         for position, item in enumerate(store.users):
-            self.session.add(UserRecord(id=item.id, email=item.email, role=item.role, password_hash=item.password_hash, position=position))
+            self.session.add(UserRecord(id=item.id, email=item.email, role=item.role, password_hash=item.password_hash, name=item.name, email_verified=item.email_verified, auth_version=item.auth_version, position=position))
         for position, item in enumerate(store.companies):
             self.session.add(CompanyRecord(id=item.id, name=item.name, description=item.description, website=item.website, logo=item.logo, accent=item.accent, position=position))
         self.session.flush()
@@ -245,6 +245,7 @@ class SQLAlchemyStoreRepository:
         sync(
             UserRecord, before.users, after.users, lambda item: item.id,
             lambda item, key: UserRecord(id=key, email=item.email, role=item.role, password_hash=item.password_hash,
+                                          name=item.name, email_verified=item.email_verified, auth_version=item.auth_version,
                                           position=after.users.index(item)),
         )
         sync(

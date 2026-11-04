@@ -17,7 +17,9 @@ async function login(page: Page, email: string, password: string) {
   await page.getByTestId('button-login').click();
   const response = await loginResponse;
   expect(response.status(), 'login API response').toBe(200);
-  await expect(page.getByRole('heading', { name: 'Check your inbox.' })).toBeVisible();
+  // Login redirects verified demo accounts to their role-specific home page;
+  // the inbox prompt is only for unverified accounts.
+  await expect(page.getByTestId('label-current-user')).toBeVisible();
 }
 
 test('visitor, candidate, and recruiter complete an application flow in isolated browser contexts', async ({ browser }) => {
@@ -44,16 +46,9 @@ test('visitor, candidate, and recruiter complete an application flow in isolated
     );
     expect(await candidate.evaluate(() => sessionStorage.getItem('steadwork.access_token'))).toBeTruthy();
 
-    const deniedResponsePromise = candidate.waitForResponse(response => {
-      const url = new URL(response.url());
-      return url.pathname === '/api/employer/jobs/job-platform/applications/'
-        && response.request().method() === 'GET';
-    });
     await candidate.goto(appPath('/employer/jobs/job-platform/applicants'));
-    const deniedResponse = await deniedResponsePromise;
-    expect(deniedResponse.status(), 'candidate employer applications response').toBe(403);
-    await expect(candidate.getByRole('alert').filter({ hasText: 'You do not have permission to' }))
-      .toContainText('permission');
+    await expect(candidate.getByRole('heading', { name: 'You do not have access to this page' })).toBeVisible();
+    await expect(candidate.getByText('This area is for hiring team accounts.')).toBeVisible();
     await expect(candidate.getByTestId(/^row-applicant-/)).toHaveCount(0);
 
     await candidate.goto(appPath('/profile'));

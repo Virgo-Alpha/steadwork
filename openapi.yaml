@@ -5,9 +5,8 @@ info:
   description: |
     Contract for the HTTP endpoints called by `frontend/src/services/http-job-board-service.ts`.
     Paths are relative to `/api`. Authentication uses the bearer access token returned
-    by `POST /auth/login/`. The frontend does not call endpoints for methods it marks
-    unsupported (registration, recommendations, email verification, password reset,
-    role switching, and demo reset); those are intentionally absent here.
+    by `POST /auth/login/`. Registration, verification, password reset, and candidate
+    recommendations are supported. Role switching and demo reset remain browser-mock-only.
 servers:
   - url: /api
     description: Same-origin API base used by the frontend
@@ -60,6 +59,16 @@ paths:
             application/json:
               schema: { type: array, items: { $ref: '#/components/schemas/Job' } }
         '400': { $ref: '#/components/responses/BadRequest' }
+  /jobs/recommended/:
+    get:
+      tags: [Candidate]
+      operationId: recommendJobs
+      summary: Rank published jobs by overlap with the authenticated candidate's skills
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Ranked published jobs. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /jobs/{jobId}/:
     get:
       tags: [Public]
@@ -123,6 +132,74 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/LoginResponse' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+  /auth/logout/:
+    post:
+      tags: [Authentication]
+      operationId: logout
+      summary: Invalidate the current user's issued bearer tokens
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204': { description: Signed out. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /auth/register/:
+    post:
+      tags: [Authentication]
+      operationId: registerAccount
+      summary: Create a candidate or company account and send a verification email
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password, role]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 120 }
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8, maxLength: 256 }
+                role: { type: string, enum: [candidate, company] }
+                companyName: { type: string, minLength: 1, maxLength: 160 }
+      responses:
+        '201': { description: Account created; response contains bearer token and user. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { description: Email delivery is unavailable; account creation is rolled back. }
+  /auth/verify-email/:
+    post:
+      tags: [Authentication]
+      operationId: verifyEmail
+      summary: Verify an email address with a one-time token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [token], properties: { token: { type: string } } }
+      responses:
+        '200': { description: Verified user. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /auth/password-reset/:
+    post:
+      tags: [Authentication]
+      operationId: passwordReset
+      summary: Request a reset email or consume a one-time reset token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string, format: email }
+                token: { type: string }
+                password: { type: string, minLength: 8, maxLength: 256 }
+      responses:
+        '202': { description: Non-enumerating reset request response. }
+        '204': { description: Password updated. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '503': { description: Email delivery is unavailable. }
   /auth/me/:
     get:
       tags: [Authentication]
@@ -537,7 +614,7 @@ components:
         id: { type: string }
         name: { type: string }
         email: { type: string, format: email }
-        role: { type: string, enum: [candidate, company, admin] }
+        role: { type: string, enum: [candidate, company, recruiter, admin] }
         emailVerified: { type: boolean }
     Job:
       type: object
@@ -624,8 +701,9 @@ components:
         createdAt: { type: string, format: date-time }
     EmployerDashboard:
       type: object
-      required: [activeJobs, totalJobs, applications, shortlisted, recent]
+      required: [companyName, activeJobs, totalJobs, applications, shortlisted, recent]
       properties:
+        companyName: { type: string }
         activeJobs: { type: integer }
         totalJobs: { type: integer }
         applications: { type: integer }

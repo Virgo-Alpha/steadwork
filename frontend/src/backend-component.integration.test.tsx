@@ -79,6 +79,10 @@ const submit = async (form: HTMLFormElement) => {
   await act(async () => { form.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true })); });
 };
 const login = async (email: string, password: string) => {
+  if (!document.querySelector('[data-testid="link-sign-in"]') && document.querySelector('[data-testid="button-sign-out"]')) {
+    await click(document.querySelector('[data-testid="button-sign-out"]')!);
+    await waitFor(() => Boolean(document.querySelector('[data-testid="link-sign-in"]')));
+  }
   await click(document.querySelector('[data-testid="link-sign-in"]')!);
   await waitFor(() => Boolean(document.querySelector('[data-testid="button-login"]')));
   input('input-account-email', email);
@@ -89,7 +93,7 @@ const login = async (email: string, password: string) => {
     window.history.pushState({}, '', '/');
     await act(async () => { window.dispatchEvent(new PopStateEvent('popstate')); });
   }
-  await waitFor(() => Boolean(document.querySelector('[data-testid="link-job-job-platform"]')));
+  await waitFor(() => Boolean(document.querySelector('[data-testid="link-job-job-platform"]') || document.querySelector('[data-testid="button-create-job"]')));
 };
 
 beforeAll(async () => {
@@ -99,6 +103,7 @@ beforeAll(async () => {
   const backendDir = path.resolve(rootDir, '../backend');
   backend = start(path.join(backendDir, '.venv/bin/python'), ['manage.py', 'runserver', `127.0.0.1:${backendPort}`], backendDir, {
     STEADWORK_TEST_CLEAN_APPLICATIONS: '1',
+    STEADWORK_STORE: 'inmemory',
   });
   await waitFor(async () => {
     try { return (await originalFetch(`${backendUrl()}/api/health/`)).ok; } catch { return false; }
@@ -121,6 +126,7 @@ const resetBackend = async () => {
   const backendDir = path.resolve(process.cwd(), '../backend');
   backend = start(path.join(backendDir, '.venv/bin/python'), ['manage.py', 'runserver', `127.0.0.1:${backendPort}`], backendDir, {
     STEADWORK_TEST_CLEAN_APPLICATIONS: '1',
+    STEADWORK_STORE: 'inmemory',
   });
   await waitFor(async () => { try { return (await originalFetch(`${backendUrl()}/api/health/`)).ok; } catch { return false; } });
 };
@@ -146,6 +152,24 @@ beforeEach(async () => {
 });
 
 describe('frontend journeys over the live API and Vite proxy', () => {
+  it('shows a sign-in prompt instead of calling protected application pages signed out', async () => {
+    await click(document.querySelector('[data-testid="nav-applications"]')!);
+    await waitFor(() => Boolean(document.querySelector('[data-testid="link-protected-sign-in"]')));
+    expect(document.body.textContent).toContain('Sign in to continue');
+    expect(document.querySelector<HTMLAnchorElement>('[data-testid="link-protected-sign-in"]')?.getAttribute('href')).toContain('returnTo');
+    await click(document.querySelector('[data-testid="nav-my-profile"]')!);
+    await waitFor(() => Boolean(document.querySelector('[data-testid="link-protected-sign-in"]')));
+    expect(document.querySelector('[aria-label="Checking your session"]')).toBeNull();
+  });
+
+  it('blocks a signed-in candidate from employer pages with a role-specific state', async () => {
+    await login('candidate@example.com', 'candidate-password');
+    window.history.pushState({}, '', '/employer');
+    await act(async () => { window.dispatchEvent(new PopStateEvent('popstate')); });
+    await waitFor(() => document.body.textContent?.includes('You do not have access to this page') ?? false);
+    expect(document.body.textContent).toContain('hiring team accounts');
+  });
+
   it('loads public jobs and company details, then shows an actionable invalid request', async () => {
     expect(document.body.textContent).toContain('Platform Engineer');
     await click(document.querySelector('[data-testid="link-job-job-platform"]')!);

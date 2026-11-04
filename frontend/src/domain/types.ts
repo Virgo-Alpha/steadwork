@@ -11,7 +11,7 @@ export interface Job {
 }
 export interface Company { id: string; name: string; description: string; website: string; logo: string; accent: string; }
 export interface User { id: string; name: string; email: string; role: UserRole; emailVerified?: boolean; }
-export interface AccountRegistration { name: string; email: string; password: string; role: 'candidate' | 'company'; }
+export interface AccountRegistration { name: string; email: string; password: string; role: 'candidate' | 'company'; companyName?: string; }
 export interface LoginInput { email: string; password: string; }
 export interface CandidateProfile {
   userId: string; headline: string; location: string; skills: string[]; experience: string; education: string;
@@ -26,5 +26,5 @@ export interface JobFilters {
   keyword?: string; location?: string; jobType?: string; remotePolicy?: string; experienceLevel?: string;
   salaryMin?: number; skills?: string[]; companyId?: string; postedWithin?: number; sort?: 'recent' | 'salary' | 'relevance';
 }
-export interface EmployerDashboard { activeJobs: number; totalJobs: number; applications: number; shortlisted: number; recent: Application[]; }
+export interface EmployerDashboard { companyName: string; activeJobs: number; totalJobs: number; applications: number; shortlisted: number; recent: Application[]; }
 export interface ApplicationInput { jobId: string; candidateName: string; candidateEmail: string; cvName: string; coverLetter: string; isGuest?: boolean; }

@@ -295,6 +295,11 @@ jobs:
       - name: Publish development URL
         env:
           SERVICE_URL: ${{ steps.deploy.outputs.service_url }}
+          IMAGE_URL: ${{ steps.image.outputs.image_url }}
+          IMAGE_TAG: ${{ steps.image.outputs.image_tag }}
         run: |
           echo "## Development deployment successful" >> "$GITHUB_STEP_SUMMARY"
           echo "Application: [$SERVICE_URL]($SERVICE_URL)" >> "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
+          echo "Image: \`$IMAGE_URL:$IMAGE_TAG\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Use \`$IMAGE_TAG\` as the optional **image_tag** input to promote this exact build. Leave it blank to promote the latest successful dev image." >> "$GITHUB_STEP_SUMMARY"

@@ -23,16 +23,20 @@ function Notice({ text, close }: { text: string; close: () => void }) {
   if (!text) return null;
   return <div className="toast-note" role="status" data-testid="status-feedback" style={{ position: 'fixed', zIndex: 50, right: 20, bottom: 20, maxWidth: 360, display: 'flex', gap: 12, alignItems: 'center', background: 'hsl(var(--foreground))', color: 'hsl(var(--background))', padding: '13px 16px', borderRadius: 9, boxShadow: '0 14px 40px #18233330' }}>{text}<button data-testid="button-dismiss-feedback" onClick={close} aria-label="Dismiss"><X size={15}/></button></div>;
 }
-function InlineError({ text }: { text: string }) {
-  if (!text) return null;
-  return <div role="alert" data-testid="status-api-error" style={{ margin: '12px auto', maxWidth: 1120, padding: '12px 16px', color: 'hsl(var(--destructive))', background: 'hsl(var(--destructive) / .08)', borderRadius: 8 }}>{text}</div>;
-}
 function AppShell({ children }: { children: ReactNode }) {
   const [path, setLocation] = useLocation();
   const user = useLoad<User | null>(() => hasSessionToken() ? service.getCurrentUser() : Promise.resolve(null), [path]);
   const [toast, setToast] = useState('');
   const [role, setRole] = useState<'candidate' | 'company'>('candidate');
+  const mockMode = import.meta.env.VITE_DATA_MODE === 'mock';
   useEffect(() => { user.data && setRole(isEmployerRole(user.data.role) ? 'company' : 'candidate'); }, [user.data]);
+  useEffect(() => {
+    const onUnauthorized = () => {
+      if (!['/login', '/register', '/forgot-password', '/verify-email'].includes(path)) setLocation(`/login?returnTo=${encodeURIComponent(path)}`);
+    };
+    window.addEventListener('steadwork:unauthorized', onUnauthorized);
+    return () => window.removeEventListener('steadwork:unauthorized', onUnauthorized);
+  }, [path, setLocation]);
   const updateRole = async (next: 'candidate' | 'company') => {
     try {
       const updated = await service.switchRole(next);
@@ -59,16 +63,15 @@ function AppShell({ children }: { children: ReactNode }) {
         </nav>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div className="auth-links" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <Link href="/login" className="nav-link" data-testid="link-sign-in" style={{ fontSize: 12 }}>Sign in</Link>
-            <Link href="/register" className="btn btn-primary" data-testid="link-create-account" style={{ minHeight: 36, padding: '0 12px', fontSize: 11 }}>Create account</Link>
+            {hasSessionToken() ? <><span className="nav-link" data-testid="label-current-user" style={{ fontSize: 12 }}>{user.data?.name || user.data?.email || 'Account'}</span><button className="nav-link" data-testid="button-sign-out" onClick={async () => { await service.logout(); setLocation('/login'); }}>Sign out</button></> : <><Link href="/login" className="nav-link" data-testid="link-sign-in" style={{ fontSize: 12 }}>Sign in</Link><Link href="/register" className="btn btn-primary" data-testid="link-create-account" style={{ minHeight: 36, padding: '0 12px', fontSize: 11 }}>Create account</Link></>}
           </div>
           <Link href="/notifications" className="btn btn-quiet" data-testid="link-notifications" style={{ width: 38, height: 38, minHeight: 38, padding: 0 }} aria-label="Notifications"><Bell size={18}/></Link>
-          <label className="role-switch" style={{ display: 'flex', alignItems: 'center', gap: 6, borderLeft: '1px solid hsl(var(--border))', paddingLeft: 12 }}>
+          {mockMode && <label className="role-switch" style={{ display: 'flex', alignItems: 'center', gap: 6, borderLeft: '1px solid hsl(var(--border))', paddingLeft: 12 }}>
             <span className="eyebrow" style={{ letterSpacing: '.04em', whiteSpace: 'nowrap' }}>Demo as</span>
             <select aria-label="Switch demo role" data-testid="select-demo-role" value={role} onChange={e => updateRole(e.target.value as 'candidate' | 'company')} style={{ border: 0, background: 'transparent', fontSize: 12, fontWeight: 700, color: 'hsl(var(--foreground))', outline: 'none' }}>
               <option value="candidate">Candidate</option><option value="company">Hiring team</option>
             </select>
-          </label>
+          </label>}
         </div>
       </div>
       <div className="mobile-nav" style={{ display: 'none', borderTop: '1px solid hsl(var(--border))', justifyContent: 'space-around', padding: '9px 4px', background: 'hsl(var(--background))' }}>
@@ -76,12 +79,22 @@ function AppShell({ children }: { children: ReactNode }) {
         <Link href="/login" className="nav-link" data-testid="mobile-nav-account" style={{ display: 'grid', justifyItems: 'center', fontSize: 10, gap: 3 }}><CircleUserRound size={17}/>Account</Link>
       </div>
     </header>
-    <main><InlineError text={user.error} />{children}</main>
+    <main>{children}</main>
     <footer style={{ borderTop: '1px solid hsl(var(--border))', marginTop: 80, padding: '24px 0', color: 'hsl(var(--muted-foreground))', fontSize: 12 }}>
-      <div className="main-wrap" style={{ display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}><span>steadwork — thoughtful work starts here.</span><button className="nav-link" data-testid="button-reset-demo" onClick={async () => { try { await service.resetDemo(); setToast('Demo data restored to its starting point'); setLocation('/'); } catch (reason) { setToast(reason instanceof Error ? reason.message : 'Unable to reset demo data.'); } }}>Reset demo data</button></div>
+      <div className="main-wrap" style={{ display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}><span>steadwork — thoughtful work starts here.</span>{mockMode && <button className="nav-link" data-testid="button-reset-demo" onClick={async () => { try { await service.resetDemo(); setToast('Demo data restored to its starting point'); setLocation('/'); } catch (reason) { setToast(reason instanceof Error ? reason.message : 'Unable to reset demo data.'); } }}>Reset demo data</button>}</div>
     </footer>
     <Notice text={toast} close={() => setToast('')}/>
   </div>;
+}
+function ProtectedPage({ children, role }: { children: ReactNode; role?: 'candidate' | 'company' }) {
+  const [path] = useLocation();
+  const auth = useLoad<User | null>(() => hasSessionToken() ? service.getCurrentUser() : Promise.resolve(null));
+  const returnTo = path.startsWith('/') && !path.startsWith('//') ? path : '/';
+  if (!hasSessionToken()) return <div className="main-wrap page-enter" style={{ paddingTop: 55, maxWidth: 700 }}><div className="surface" style={{ padding: 32, textAlign: 'center' }}><h1 className="font-display">Sign in to continue</h1><p style={{ color: 'hsl(var(--muted-foreground))' }}>Sign in to see your account information and continue where you left off.</p><Link className="btn btn-primary" href={`/login?returnTo=${encodeURIComponent(returnTo)}`} data-testid="link-protected-sign-in">Sign in</Link></div></div>;
+  if (auth.loading) return <div className="main-wrap" style={{ paddingTop: 45 }}><div className="surface skeleton" style={{ height: 180 }} aria-label="Checking your session"/></div>;
+  if (auth.error || !auth.data) return <div className="main-wrap page-enter" style={{ paddingTop: 55, maxWidth: 700 }}><div className="surface" style={{ padding: 32, textAlign: 'center' }}><h1 className="font-display">Please sign in again</h1><p style={{ color: 'hsl(var(--muted-foreground))' }}>Your session is no longer valid. Sign in to continue.</p><Link className="btn btn-primary" href={`/login?returnTo=${encodeURIComponent(returnTo)}`} data-testid="link-expired-session-sign-in">Sign in</Link></div></div>;
+  if ((role === 'candidate' && auth.data.role !== 'candidate') || (role === 'company' && !isEmployerRole(auth.data.role))) return <div className="main-wrap page-enter" style={{ paddingTop: 55, maxWidth: 700 }}><div className="surface" style={{ padding: 32, textAlign: 'center' }}><h1 className="font-display">You do not have access to this page</h1><p style={{ color: 'hsl(var(--muted-foreground))' }}>This area is for {role === 'candidate' ? 'candidate' : 'hiring team'} accounts.</p><Link href="/" className="btn btn-outline">Back to roles</Link></div></div>;
+  return <>{children}</>;
 }
 function PageTitle({ kicker, title, subtitle, side }: { kicker?: string; title: string; subtitle?: string; side?: ReactNode }) {
   return <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'end', gap: 18, flexWrap: 'wrap', marginBottom: 28 }}><div>{kicker && <div className="eyebrow" style={{ marginBottom: 10 }}>{kicker}</div>}<h1 className="font-display" style={{ fontSize: 'clamp(30px, 4vw, 42px)', lineHeight: 1.08, letterSpacing: '-.055em', margin: 0 }}>{title}</h1>{subtitle && <p style={{ color: 'hsl(var(--muted-foreground))', margin: '10px 0 0', fontSize: 14 }}>{subtitle}</p>}</div>{side}</div>;
@@ -104,25 +117,29 @@ function JobCard({ job, saved = false, onSave }: { job: Job; saved?: boolean; on
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 12 }}>{job.skills.slice(0,4).map(skill => <span key={skill} className="tag">{skill}</span>)}</div>
     </div>
     <div style={{ display: 'grid', justifyItems: 'end', gap: 14 }}>
-      <button aria-label={saved ? 'Remove saved job' : 'Save job'} data-testid={`button-save-${job.id}`} className="btn btn-quiet" onClick={() => onSave?.(job.id)} style={{ padding: 4, minHeight: 30, color: saved ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))' }}><Bookmark size={18} fill={saved ? 'currentColor' : 'none'}/></button>
+      {onSave && <button aria-label={saved ? 'Remove saved job' : 'Save job'} data-testid={`button-save-${job.id}`} className="btn btn-quiet" onClick={() => onSave(job.id)} style={{ padding: 4, minHeight: 30, color: saved ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))' }}><Bookmark size={18} fill={saved ? 'currentColor' : 'none'}/></button>}
       <span className="font-mono" style={{ color: 'hsl(var(--muted-foreground))', fontSize: 10 }}>{new Date(job.postedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
     </div>
   </article>;
 }
 function HomePage() {
+  const [, setLocation] = useLocation();
   const [form, setForm] = useState<JobFilters>({ sort: 'recent' });
   const [draftKeyword, setDraftKeyword] = useState('');
   const [skillsText, setSkillsText] = useState('');
   const [savedIds, setSavedIds] = useState<string[]>([]);
   const [error, setError] = useState('');
+  const mockMode = import.meta.env.VITE_DATA_MODE === 'mock';
+  const { data: currentUser } = useLoad(() => mockMode || hasSessionToken() ? service.getCurrentUser() : Promise.resolve(null));
+  const canUseCandidateFeatures = mockMode ? currentUser?.role !== 'company' : !hasSessionToken() || currentUser?.role === 'candidate';
   const { data: jobs, loading, reload } = useLoad(() => service.listJobs(form), [JSON.stringify(form)]);
-  const { data: saved, error: savedError, reload: reloadSaved } = useLoad(() => hasSessionToken() ? service.listSavedJobs() : Promise.resolve([]));
-  const { data: recommended } = useLoad(() => service.recommendJobs());
+  const { data: saved, error: savedError, reload: reloadSaved } = useLoad(() => (mockMode || hasSessionToken()) && canUseCandidateFeatures ? service.listSavedJobs() : Promise.resolve([]), [canUseCandidateFeatures]);
+  const { data: recommended, error: recommendationError, reload: reloadRecommendations } = useLoad(() => (mockMode || hasSessionToken() && currentUser?.role === 'candidate') ? service.recommendJobs() : Promise.resolve([]), [currentUser?.role]);
   const { data: companies } = useLoad(() => service.listCompanies());
   useEffect(() => setSavedIds(saved?.map(x => x.id) || []), [saved]);
   const change = (key: keyof JobFilters, value: string) => setForm(prev => ({ ...prev, [key]: value || undefined }));
   const searchSubmit = (e: FormEvent) => { e.preventDefault(); setForm(prev => ({ ...prev, keyword: draftKeyword || undefined, skills: skillsText.split(',').map(s => s.trim()).filter(Boolean) })); };
-  const save = async (id: string) => { try { if (savedIds.includes(id)) { await service.unsaveJob(id); setSavedIds(x => x.filter(i => i !== id)); } else { await service.saveJob(id); setSavedIds(x => [...x, id]); } } catch(e) { setError(e instanceof Error ? e.message : 'Could not update saved jobs'); } };
+  const save = async (id: string) => { if (!hasSessionToken()) { setLocation(`/login?returnTo=${encodeURIComponent(window.location.pathname)}`); return; } try { if (savedIds.includes(id)) { await service.unsaveJob(id); setSavedIds(x => x.filter(i => i !== id)); } else { await service.saveJob(id); setSavedIds(x => [...x, id]); } } catch(e) { setError(e instanceof Error ? e.message : 'Could not update saved jobs'); } };
   return <div className="main-wrap page-enter" style={{ paddingTop: 34 }}>
     <section style={{ position: 'relative', overflow: 'hidden', borderRadius: 18, padding: '38px clamp(24px, 5vw, 56px)', color: 'hsl(42 34% 96%)', background: 'hsl(215 33% 19%)', marginBottom: 34 }}>
       <div style={{ position: 'absolute', right: '-5%', top: '-70%', width: 430, height: 430, border: '1px solid hsl(158 42% 58% / .28)', borderRadius: '50%' }}></div><div style={{ position: 'absolute', right: '7%', top: '-35%', width: 300, height: 300, border: '1px solid hsl(158 42% 58% / .22)', borderRadius: '50%' }}></div>
@@ -141,7 +158,7 @@ function HomePage() {
         <PageTitle kicker="The shortlist" title="Roles worth a closer look" subtitle={`${jobs?.length ?? 0} open positions from teams building with care.`} side={<label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, color: 'hsl(var(--muted-foreground))' }}><ArrowDownUp size={15}/><select aria-label="Sort jobs" data-testid="select-sort" className="field" style={{ width: 145, minHeight: 36, padding: '6px 8px' }} value={form.sort || 'recent'} onChange={e => change('sort', e.target.value)}><option value="recent">Most recent</option><option value="salary">Salary: high first</option></select></label>}/>
         {error && <ErrorState message={error} retry={() => setError('')}/>}
         {savedError && <ErrorState message={savedError} retry={reloadSaved}/>}
-        {loading ? <JobSkeleton/> : jobs?.length ? <div style={{ display: 'grid', gap: 12 }}>{jobs.map(job => <JobCard key={job.id} job={job} saved={savedIds.includes(job.id)} onSave={save}/>)}</div> : <EmptyState title="No roles match just yet" body="Try widening your filters or removing a skill to see more possibilities." action={<button className="btn btn-outline" onClick={() => { setForm({ sort: 'recent' }); setDraftKeyword(''); setSkillsText(''); }}>Clear all filters</button>}/>}
+        {loading ? <JobSkeleton/> : jobs?.length ? <div style={{ display: 'grid', gap: 12 }}>{jobs.map(job => <JobCard key={job.id} job={job} saved={savedIds.includes(job.id)} onSave={canUseCandidateFeatures ? save : undefined}/>)}</div> : <EmptyState title="No roles match just yet" body="Try widening your filters or removing a skill to see more possibilities." action={<button className="btn btn-outline" onClick={() => { setForm({ sort: 'recent' }); setDraftKeyword(''); setSkillsText(''); }}>Clear all filters</button>}/>}
       </div>
       <aside style={{ display: 'grid', gap: 16 }}>
         <div className="surface" style={{ padding: 17 }}>
@@ -157,12 +174,11 @@ function HomePage() {
             <button className="btn btn-outline" data-testid="button-apply-filters" onClick={() => setForm(p => ({ ...p, skills: skillsText.split(',').map(s => s.trim()).filter(Boolean) }))}>Apply filters <ArrowRight size={14}/></button>
           </div>
         </div>
-        <div className="surface" style={{ padding: 17, background: 'hsl(158 37% 92%)', borderColor: 'hsl(158 25% 82%)' }}>
+        {((mockMode && canUseCandidateFeatures) || hasSessionToken() && currentUser?.role === 'candidate') && <div className="surface" style={{ padding: 17, background: 'hsl(158 37% 92%)', borderColor: 'hsl(158 25% 82%)' }}>
           <div className="eyebrow" style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Sparkles size={13}/> Picked for you</div>
           <p style={{ fontFamily: 'var(--app-font-serif)', fontWeight: 800, margin: '7px 0 12px' }}>A few good fits</p>
-          {(recommended || []).slice(0,2).map(j => <Link href={`/jobs/${j.id}`} key={j.id} data-testid={`recommend-${j.id}`} style={{ display: 'block', fontSize: 12, padding: '9px 0', borderTop: '1px solid hsl(158 25% 82%)' }}>{j.title}<span style={{ display: 'block', fontSize: 10, marginTop: 4, color: 'hsl(var(--muted-foreground))' }}>{j.skills.slice(0,2).join(' · ')}</span></Link>)}
-          {!recommended?.length && <small>Add skills to your profile for tailored recommendations.</small>}
-        </div>
+          {recommendationError ? <ErrorState message={recommendationError} retry={reloadRecommendations}/> : <>{(recommended || []).slice(0,2).map(j => <Link href={`/jobs/${j.id}`} key={j.id} data-testid={`recommend-${j.id}`} style={{ display: 'block', fontSize: 12, padding: '9px 0', borderTop: '1px solid hsl(158 25% 82%)' }}>{j.title}<span style={{ display: 'block', fontSize: 10, marginTop: 4, color: 'hsl(var(--muted-foreground))' }}>{j.skills.slice(0,2).join(' · ')}</span></Link>)}{!recommended?.length && <small>Add skills to your profile for tailored recommendations.</small>}</>}
+        </div>}
       </aside>
     </section>
   </div>;
@@ -175,9 +191,11 @@ function EmptyState({ title, body, action }: { title: string; body: string; acti
 function ErrorState({ message, retry }: { message: string; retry: () => void }) { return <div role="alert" className="surface" style={{ padding: 18, borderColor: 'hsl(var(--destructive) / .4)', color: 'hsl(var(--destructive))' }}>{message} <button className="btn btn-outline" onClick={retry} style={{ marginLeft: 10 }}>Try again</button></div>; }
 function JobDetailPage() {
   const { id = '' } = useParams();
+  const [, setLocation] = useLocation();
+  const mockMode = import.meta.env.VITE_DATA_MODE === 'mock';
   const { data: job, loading, reload } = useLoad(() => service.getJob(id), [id]);
-  const { data: user } = useLoad(() => hasSessionToken() ? service.getCurrentUser() : Promise.resolve(null));
-  const { data: profile } = useLoad(() => hasSessionToken() ? service.getProfile() : Promise.resolve(null));
+  const { data: user } = useLoad(() => hasSessionToken() || mockMode ? service.getCurrentUser() : Promise.resolve(null));
+  const { data: profile } = useLoad(() => user?.role === 'candidate' ? service.getProfile() : Promise.resolve(null), [user?.role]);
   const [company, setCompany] = useState<{ name: string; description: string; website: string; logo: string; accent: string } | null>(null);
   const [saved, setSaved] = useState(false);
   const [applyOpen, setApplyOpen] = useState(false);
@@ -186,12 +204,12 @@ function JobDetailPage() {
   const [err, setErr] = useState('');
   useEffect(() => { if (job) service.getCompany(job.companyId).then(c => c && setCompany(c)).catch(reason => setFeedback(reason instanceof Error ? reason.message : 'Could not load company details.')); }, [job]);
   useEffect(() => {
-    if (!hasSessionToken()) return;
+    if (user?.role !== 'candidate') return;
     service.listSavedJobs().then(xs => setSaved(xs.some(x => x.id === id))).catch(reason => setFeedback(reason instanceof Error ? reason.message : 'Could not load saved roles.'));
-  }, [id]);
+  }, [id, user?.role]);
   if (loading) return <div className="main-wrap" style={{ paddingTop: 50 }}><JobSkeleton/></div>;
   if (!job) return <div className="main-wrap page-enter" style={{ paddingTop: 50 }}><EmptyState title="This role has moved on" body="The listing may have closed or the link may be out of date." action={<Link className="btn btn-primary" href="/">Browse open roles</Link>}/></div>;
-  const toggleSaved = async () => { try { if (saved) await service.unsaveJob(id); else await service.saveJob(id); setSaved(!saved); setFeedback(saved ? 'Removed from your saved roles' : 'Saved for later'); } catch (reason) { setFeedback(reason instanceof Error ? reason.message : 'Could not update saved roles.'); } };
+  const toggleSaved = async () => { if (!hasSessionToken() && !mockMode) { setLocation(`/login?returnTo=${encodeURIComponent(`/jobs/${id}`)}`); return; } try { if (saved) await service.unsaveJob(id); else await service.saveJob(id); setSaved(!saved); setFeedback(saved ? 'Removed from your saved roles' : 'Saved for later'); } catch (reason) { setFeedback(reason instanceof Error ? reason.message : 'Could not update saved roles.'); } };
   const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault(); const form = new FormData(e.currentTarget);
     try {
@@ -209,7 +227,7 @@ function JobDetailPage() {
         <div className="eyebrow">Open role · {job.experienceLevel}</div><h1 className="font-display" data-testid="text-job-title" style={{ fontSize: 'clamp(34px, 5vw, 52px)', lineHeight: 1.03, letterSpacing: '-.06em', margin: '10px 0 12px' }}>{job.title}</h1>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', color: 'hsl(var(--muted-foreground))', fontSize: 12 }}><span>{job.location}</span><span>·</span><span>{job.remotePolicy}</span><span>·</span><span>{job.jobType}</span><span>·</span><span>{formatSalary(job)}</span></div>
       </div>
-      <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap' }}><button className="btn btn-outline" data-testid="button-detail-save" onClick={toggleSaved}><Bookmark size={15} fill={saved ? 'currentColor' : 'none'}/>{saved ? 'Saved' : 'Save role'}</button><button className="btn btn-primary" data-testid="button-open-application" onClick={() => { setApplyAsGuest(false); setApplyOpen(true); }}>Apply now <ArrowRight size={15}/></button></div>
+      <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap' }}>{(!hasSessionToken() && !mockMode || user?.role === 'candidate') && <button className="btn btn-outline" data-testid="button-detail-save" onClick={toggleSaved}><Bookmark size={15} fill={saved ? 'currentColor' : 'none'}/>{saved ? 'Saved' : 'Save role'}</button>}<button className="btn btn-primary" data-testid="button-open-application" onClick={() => { setApplyAsGuest(isEmployerRole(user?.role || '')); setApplyOpen(true); }}>Apply now <ArrowRight size={15}/></button></div>
     </section>
     {feedback && <div className="surface" role="status" data-testid="status-application-feedback" style={{ padding: 13, marginTop: 12, color: 'hsl(var(--primary))' }}>{feedback}</div>}
     {err && <ErrorState message={err} retry={() => setErr('')}/>}
@@ -227,7 +245,7 @@ function JobDetailPage() {
       </aside>
     </div>
     {applyOpen && <div role="dialog" aria-modal="true" aria-labelledby="apply-heading" style={modalBackdrop}><form className="surface" onSubmit={submit} style={{ width: 'min(520px, 100%)', padding: 24, display: 'grid', gap: 13, boxShadow: '0 22px 80px #18233338' }}><div style={{ display: 'flex', justifyContent: 'space-between' }}><div><div className="eyebrow">{job.applicationMethod === 'External' ? 'Track your interest' : 'A good next step'}</div><h2 id="apply-heading" className="font-display" style={{ margin: '5px 0', fontSize: 25 }}>Apply to {job.title}</h2></div><button type="button" className="btn btn-quiet" data-testid="button-close-application" onClick={() => setApplyOpen(false)}><X size={18}/></button></div>
-      <label style={{ display: 'flex', gap: 9, alignItems: 'flex-start', fontSize: 12, color: 'hsl(var(--muted-foreground))' }}><input type="checkbox" data-testid="checkbox-guest-application" checked={applyAsGuest} onChange={e => setApplyAsGuest(e.target.checked)}/><span><strong>Apply as a guest</strong><br/>You’ll receive a confirmation, but won’t be able to track this application.</span></label><label className="form-label">Your name<input key={applyAsGuest ? 'guest-name' : 'candidate-name'} className="field" required name="name" defaultValue={applyAsGuest ? '' : user?.name || ''} data-testid="input-applicant-name"/></label><label className="form-label">Email address<input key={applyAsGuest ? 'guest-email' : 'candidate-email'} className="field" required type="email" name="email" defaultValue={applyAsGuest ? '' : user?.email || ''} data-testid="input-applicant-email"/></label><label className="form-label">Resume<select className="field" name="cv" data-testid="select-cv" defaultValue={profile?.defaultCvId || profile?.cvFiles[0] || ''}>{(profile?.cvFiles || []).map(cv => <option key={cv} value={cv}>{cv}</option>)}</select></label><label className="form-label">A note for the team (optional)<textarea className="field" rows={4} name="cover" placeholder="What caught your eye about this role?" data-testid="input-cover-letter"/></label><div style={{ display: 'flex', justifyContent: 'end', gap: 8 }}><button type="button" className="btn btn-outline" onClick={() => setApplyOpen(false)}>Not now</button><button className="btn btn-primary" data-testid="button-submit-application">{job.applicationMethod === 'External' ? 'Continue to company' : 'Send application'} <ArrowRight size={14}/></button></div>
+      <label style={{ display: 'flex', gap: 9, alignItems: 'flex-start', fontSize: 12, color: 'hsl(var(--muted-foreground))' }}><input type="checkbox" data-testid="checkbox-guest-application" checked={applyAsGuest} onChange={e => setApplyAsGuest(e.target.checked)}/><span><strong>Apply as a guest</strong><br/>You’ll receive a confirmation, but won’t be able to track this application.</span></label><label className="form-label">Your name<input key={applyAsGuest ? 'guest-name' : 'candidate-name'} className="field" required name="name" defaultValue={applyAsGuest ? '' : user?.name || ''} data-testid="input-applicant-name"/></label><label className="form-label">Email address<input key={applyAsGuest ? 'guest-email' : 'candidate-email'} className="field" required type="email" name="email" defaultValue={applyAsGuest ? '' : user?.email || ''} data-testid="input-applicant-email"/></label><label className="form-label">Resume filename (metadata only)<select className="field" name="cv" data-testid="select-cv" defaultValue={profile?.defaultCvId || profile?.cvFiles[0] || ''}>{(profile?.cvFiles || []).map(cv => <option key={cv} value={cv}>{cv}</option>)}</select></label><label className="form-label">A note for the team (optional)<textarea className="field" rows={4} name="cover" placeholder="What caught your eye about this role?" data-testid="input-cover-letter"/></label><div style={{ display: 'flex', justifyContent: 'end', gap: 8 }}><button type="button" className="btn btn-outline" onClick={() => setApplyOpen(false)}>Not now</button><button className="btn btn-primary" data-testid="button-submit-application">{job.applicationMethod === 'External' ? 'Continue to company' : 'Send application'} <ArrowRight size={14}/></button></div>
     </form></div>}
   </div>;
 }
@@ -303,7 +321,7 @@ function ProfilePage() {
       <label className="form-label">Experience<textarea className="field" rows={4} data-testid="input-profile-experience" value={profile.experience} onChange={e => setField('experience', e.target.value)} placeholder="A few lines about the work you've done"/></label>
       <label className="form-label">Education<input className="field" data-testid="input-profile-education" value={profile.education} onChange={e => setField('education', e.target.value)}/></label>
       <label className="form-label">What you're looking for<textarea className="field" rows={3} data-testid="input-profile-preferences" value={profile.preferences} onChange={e => setField('preferences', e.target.value)} placeholder="Team, work style, or role preferences"/></label>
-       <div><div className="form-label">CV library</div><div style={{ display: 'grid', gap: 8 }}>{profile.cvFiles.map(cv => <div key={cv} className="surface" style={{ padding: 11, display: 'flex', gap: 10, alignItems: 'center', fontSize: 12 }}><input type="radio" name="defaultcv" checked={profile.defaultCvId === cv} onChange={() => setField('defaultCvId', cv)} data-testid={`radio-default-cv-${cv}`}/><span style={{ flex: 1 }}>{cv}</span><span className="tag">{profile.defaultCvId === cv ? 'Default' : 'Choose default'}</span><button type="button" className="btn btn-quiet" aria-label={`Remove ${cv}`} data-testid={`button-remove-cv-${cv}`} onClick={() => removeCv(cv)}>Remove</button></div>)}</div><label className="btn btn-outline" style={{ width: 'fit-content', cursor: 'pointer', marginTop: 10 }}>Add a CV<input type="file" accept=".pdf,.doc,.docx" data-testid="input-add-cv" style={{ display: 'none' }} onChange={e => { const input = e.currentTarget; void addCv(input.files?.[0]).finally(() => { input.value = ''; }); }}/></label><div style={{ color: 'hsl(var(--muted-foreground))', fontSize: 11, marginTop: 8 }}>Demo only: the CV filename is saved; file content is not uploaded or retained.</div></div>
+       <div><div className="form-label">CV filename library</div><div style={{ display: 'grid', gap: 8 }}>{profile.cvFiles.map(cv => <div key={cv} className="surface" style={{ padding: 11, display: 'flex', gap: 10, alignItems: 'center', fontSize: 12 }}><input type="radio" name="defaultcv" checked={profile.defaultCvId === cv} onChange={() => setField('defaultCvId', cv)} data-testid={`radio-default-cv-${cv}`}/><span style={{ flex: 1 }}>{cv}</span><span className="tag">{profile.defaultCvId === cv ? 'Default' : 'Choose default'}</span><button type="button" className="btn btn-quiet" aria-label={`Remove ${cv}`} data-testid={`button-remove-cv-${cv}`} onClick={() => removeCv(cv)}>Remove</button></div>)}</div><label className="btn btn-outline" style={{ width: 'fit-content', cursor: 'pointer', marginTop: 10 }}>Add a CV filename<input type="file" accept=".pdf,.doc,.docx" data-testid="input-add-cv" style={{ display: 'none' }} onChange={e => { const input = e.currentTarget; void addCv(input.files?.[0]).finally(() => { input.value = ''; }); }}/></label><div style={{ color: 'hsl(var(--muted-foreground))', fontSize: 11, marginTop: 8 }}>Metadata only: Steadwork saves the selected filename. The file is not uploaded, stored, or attached to applications.</div></div>
       {message && <div role="status" data-testid="status-profile-save" style={{ fontSize: 12, color: 'hsl(var(--primary))' }}>{message}</div>}
       <div style={{ display: 'flex', justifyContent: 'end' }}><button className="btn btn-primary" data-testid="button-save-profile"><Check size={15}/> Save profile</button></div>
     </form>
@@ -313,7 +331,7 @@ function EmployerPage() {
   const { data, loading, error, reload } = useLoad(() => service.getEmployerDashboard());
   const { data: jobs, error: jobsError, reload: reloadJobs } = useLoad(() => service.listCompanyJobs());
   return <div className="main-wrap page-enter" style={{ paddingTop: 42 }}>
-    <PageTitle kicker="Northstar Labs · hiring desk" title="Make room for good people" subtitle="A clear picture of your open roles and the people behind each application." side={<Link href="/employer/jobs/new" className="btn btn-primary" data-testid="button-create-job"><span>+</span> Create a role</Link>}/>
+    <PageTitle kicker={`${data?.companyName || 'Hiring team'} · hiring desk`} title="Make room for good people" subtitle="A clear picture of your open roles and the people behind each application." side={<Link href="/employer/jobs/new" className="btn btn-primary" data-testid="button-create-job"><span>+</span> Create a role</Link>}/>
     {loading ? <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>{[1,2,3,4].map(x => <div key={x} className="surface skeleton" style={{ height: 112 }}/>)}</div> : error ? <ErrorState message={error} retry={reload}/> : <>
       <div className="metrics-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0,1fr))', gap: 12, marginBottom: 28 }}>
         <Metric label="Live roles" value={data?.activeJobs ?? 0} icon={<BriefcaseBusiness size={17}/>}/><Metric label="All postings" value={data?.totalJobs ?? 0} icon={<TrendingUp size={17}/>}/><Metric label="Applications" value={data?.applications ?? 0} icon={<Users size={17}/>}/><Metric label="Shortlisted" value={data?.shortlisted ?? 0} icon={<Sparkles size={17}/>}/>
@@ -413,11 +431,14 @@ function AccountForm({ mode }: { mode: 'login' | 'register' }) {
           email: String(fields.get('email')),
           password: String(fields.get('password')),
           role,
+          ...(role === 'company' ? { companyName: String(fields.get('companyName') || '') } : {}),
         });
         setLocation('/verify-email');
       } else {
         const user = await service.login({ email: String(fields.get('email')), password: String(fields.get('password')) });
-        setLocation(user.emailVerified ? (user.role === 'company' ? '/employer' : '/') : '/verify-email');
+        const requested = new URLSearchParams(window.location.search).get('returnTo');
+        const safeReturn = requested?.startsWith('/') && !requested.startsWith('//') ? requested : '';
+        setLocation(user.emailVerified ? safeReturn || (isEmployerRole(user.role) ? '/employer' : '/') : '/verify-email');
       }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'We could not continue. Please try again.');
@@ -430,6 +451,7 @@ function AccountForm({ mode }: { mode: 'login' | 'register' }) {
       <p style={{ color: 'hsl(var(--muted-foreground))', fontSize: 13, lineHeight: 1.6, margin: '0 0 22px' }}>{register ? 'Create a candidate or company account to make the most of steadwork.' : 'Sign in to return to your saved roles and hiring work.'}</p>
       <form onSubmit={submit} style={{ display: 'grid', gap: 14 }}>
         {register && <label className="form-label">Your name<input className="field" name="name" required autoComplete="name" data-testid="input-account-name"/></label>}
+        {register && role === 'company' && <label className="form-label">Company name<input className="field" name="companyName" required autoComplete="organization" data-testid="input-company-name"/></label>}
         <label className="form-label">Email address<input className="field" type="email" name="email" required autoComplete="email" data-testid="input-account-email"/></label>
         <label className="form-label">Password<input className="field" type="password" name="password" required minLength={register ? 8 : 1} autoComplete={register ? 'new-password' : 'current-password'} data-testid="input-account-password"/></label>
         {register && <label className="form-label">Account type<select className="field" data-testid="select-account-role" value={role} onChange={event => setRole(event.target.value as 'candidate' | 'company')}><option value="candidate">Job seeker</option><option value="company">Company</option></select></label>}
@@ -439,42 +461,51 @@ function AccountForm({ mode }: { mode: 'login' | 'register' }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', borderTop: '1px solid hsl(var(--border))', marginTop: 20, paddingTop: 16, fontSize: 12 }}>
         {register ? <Link href="/login" className="nav-link" data-testid="link-auth-login">Already have an account? Sign in</Link> : <><Link href="/register" className="nav-link" data-testid="link-auth-register">Create an account</Link><Link href="/forgot-password" className="nav-link" data-testid="link-forgot-password">Forgot password?</Link></>}
       </div>
-      <p className="demo-note">Demo only: no password is stored, verified, or sent to a server.</p>
+      <p className="demo-note">{import.meta.env.VITE_DATA_MODE === 'mock' ? 'Demo mode: account changes stay in this browser and passwords are not stored.' : 'Your password is sent securely to the API and stored only as a one-way hash.'}</p>
     </section>
   </div>;
 }
 function PasswordResetPage() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const resetToken = new URLSearchParams(window.location.search).get('token');
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const fields = new FormData(event.currentTarget);
     try {
-      await service.requestPasswordReset(String(fields.get('email')));
+      if (resetToken) await service.completePasswordReset(resetToken, String(fields.get('password')));
+      else await service.requestPasswordReset(String(fields.get('email')));
       setError('');
-      setMessage('If this email has an account, reset instructions would be sent. Email delivery is not connected in this demo.');
+      setMessage(resetToken ? 'Your password has been updated. You can sign in with the new password.' : 'If an account exists for that email, reset instructions have been sent.');
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Enter a valid email address.');
     }
   };
   return <div className="main-wrap page-enter auth-wrap"><section className="surface auth-card">
-    <div className="eyebrow">Account recovery</div><h1 className="font-display" style={{ fontSize: 34, letterSpacing: '-.05em', margin: '10px 0' }}>Reset your password.</h1>
-    <p style={{ color: 'hsl(var(--muted-foreground))', fontSize: 13, lineHeight: 1.6 }}>Enter the email address on your account. In a live service, we would send a secure reset link.</p>
-    <form onSubmit={submit} style={{ display: 'grid', gap: 14, marginTop: 18 }}><label className="form-label">Email address<input className="field" type="email" name="email" required data-testid="input-reset-email"/></label><button className="btn btn-primary" data-testid="button-request-reset">Request reset link</button></form>
+    <div className="eyebrow">Account recovery</div><h1 className="font-display" style={{ fontSize: 34, letterSpacing: '-.05em', margin: '10px 0' }}>{resetToken ? 'Choose a new password.' : 'Reset your password.'}</h1>
+    <p style={{ color: 'hsl(var(--muted-foreground))', fontSize: 13, lineHeight: 1.6 }}>{resetToken ? 'Choose a password with at least 8 characters.' : 'Enter your account email and we will send a one-time reset link if an account exists.'}</p>
+    <form onSubmit={submit} style={{ display: 'grid', gap: 14, marginTop: 18 }}>{resetToken ? <label className="form-label">New password<input className="field" type="password" name="password" minLength={8} required autoComplete="new-password" data-testid="input-new-password"/></label> : <label className="form-label">Email address<input className="field" type="email" name="email" required data-testid="input-reset-email"/></label>}<button className="btn btn-primary" data-testid="button-request-reset">{resetToken ? 'Update password' : 'Send reset link'}</button></form>
     {message && <div role="status" data-testid="status-reset-message" style={{ marginTop: 15, color: 'hsl(var(--primary))', fontSize: 12 }}>{message}</div>}
     {error && <div role="alert" data-testid="status-reset-error" style={{ marginTop: 15, color: 'hsl(var(--destructive))', fontSize: 12 }}>{error}</div>}
     <Link href="/login" className="nav-link" data-testid="link-reset-login" style={{ display: 'inline-block', marginTop: 18, fontSize: 12 }}>Back to sign in</Link>
   </section></div>;
 }
 function VerifyEmailPage() {
-  const { data: user, loading } = useLoad(() => service.getCurrentUser());
+  const { data: user, loading, reload } = useLoad(() => hasSessionToken() ? service.getCurrentUser() : Promise.resolve(null));
   const [updatedUser, setUpdatedUser] = useState<User | null>(null);
   const [error, setError] = useState('');
+  const token = new URLSearchParams(window.location.search).get('token') || undefined;
   useEffect(() => { if (user) setUpdatedUser(user); }, [user]);
-  const verify = async () => {
+  useEffect(() => {
+    if (!token) return;
+    let live = true;
+    service.verifyEmail(token).then(updated => { if (live) { setUpdatedUser(updated); setError(''); } })
+      .catch(reason => { if (live) setError(reason instanceof Error ? reason.message : 'Email verification could not be completed.'); });
+    return () => { live = false; };
+  }, [token]);
+  const checkStatus = async () => {
     try {
-      const token = new URLSearchParams(window.location.search).get('token') || undefined;
-      setUpdatedUser(await service.verifyEmail(token));
+      setUpdatedUser(await service.getCurrentUser());
       setError('');
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Email verification could not be completed.');
@@ -484,11 +515,11 @@ function VerifyEmailPage() {
   return <div className="main-wrap page-enter auth-wrap"><section className="surface auth-card">
     <div className="eyebrow">{verified ? 'You’re all set' : 'One more step'}</div>
     <h1 className="font-display" style={{ fontSize: 34, letterSpacing: '-.05em', margin: '10px 0' }}>{verified ? 'Email confirmed.' : 'Check your inbox.'}</h1>
-    <p style={{ color: 'hsl(var(--muted-foreground))', fontSize: 13, lineHeight: 1.6 }}>{loading ? 'Loading account…' : `We would send a verification link to ${updatedUser?.email || 'your email address'}.`}</p>
-    {!verified && <button className="btn btn-primary" data-testid="button-demo-verify-email" onClick={verify} disabled={loading}>Complete demo verification</button>}
+    <p style={{ color: 'hsl(var(--muted-foreground))', fontSize: 13, lineHeight: 1.6 }}>{loading ? 'Loading account…' : verified ? 'Your email address has been verified.' : updatedUser?.email ? `Open the one-time verification link sent to ${updatedUser.email}.` : 'Open the one-time verification link sent to your email. You can use it here even if you opened it on another device.'}</p>
+    {!verified && hasSessionToken() && !token && <button className="btn btn-outline" data-testid="button-check-verification" onClick={checkStatus} disabled={loading}>Check verification status</button>}
     {verified && <Link className="btn btn-primary" data-testid="link-continue-after-verification" href={updatedUser?.role === 'company' ? '/employer' : '/'} style={{ marginTop: 10 }}>Continue to steadwork <ArrowRight size={15}/></Link>}
     {error && <div role="alert" data-testid="status-verification-error" style={{ marginTop: 12, color: 'hsl(var(--destructive))', fontSize: 12 }}>{error}</div>}
-    <p className="demo-note">Demo only: no verification email is sent. A live backend should validate a one-time token.</p>
+    <p className="demo-note">A one-time link was sent to your email. In local development, the link is printed by the backend email console.</p>
   </section></div>;
 }
 function LoginPage() { return <AccountForm mode="login"/>; }
@@ -497,14 +528,14 @@ function RoutedPages() {
   return <Switch>
     <Route path="/" component={HomePage}/>
     <Route path="/jobs/:id" component={JobDetailPage}/>
-    <Route path="/saved" component={SavedPage}/>
-    <Route path="/applications" component={ApplicationsPage}/>
-    <Route path="/profile" component={ProfilePage}/>
-    <Route path="/employer" component={EmployerPage}/>
-    <Route path="/employer/jobs" component={EmployerJobsPage}/>
-    <Route path="/employer/jobs/new" component={JobEditorPage}/>
-    <Route path="/employer/jobs/:id/applicants" component={ApplicantsPage}/>
-    <Route path="/notifications" component={NotificationsPage}/>
+    <Route path="/saved" component={() => <ProtectedPage role="candidate"><SavedPage/></ProtectedPage>}/>
+    <Route path="/applications" component={() => <ProtectedPage role="candidate"><ApplicationsPage/></ProtectedPage>}/>
+    <Route path="/profile" component={() => <ProtectedPage role="candidate"><ProfilePage/></ProtectedPage>}/>
+    <Route path="/employer" component={() => <ProtectedPage role="company"><EmployerPage/></ProtectedPage>}/>
+    <Route path="/employer/jobs" component={() => <ProtectedPage role="company"><EmployerJobsPage/></ProtectedPage>}/>
+    <Route path="/employer/jobs/new" component={() => <ProtectedPage role="company"><JobEditorPage/></ProtectedPage>}/>
+    <Route path="/employer/jobs/:id/applicants" component={() => <ProtectedPage role="company"><ApplicantsPage/></ProtectedPage>}/>
+    <Route path="/notifications" component={() => <ProtectedPage><NotificationsPage/></ProtectedPage>}/>
     <Route path="/login" component={LoginPage}/>
     <Route path="/register" component={RegisterPage}/>
     <Route path="/forgot-password" component={PasswordResetPage}/>

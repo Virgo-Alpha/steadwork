@@ -1,11 +1,10 @@
 from datetime import timedelta
-from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from api.auth import _tokens, authenticate, issue_token, validate_token
+from api.auth import authenticate, issue_token, validate_token
 from api.store import get_store, reset_store
 
 
@@ -45,7 +44,7 @@ def test_reset_store_invalidates_existing_tokens():
 def test_tokens_are_opaque_and_expire():
     user = authenticate("candidate@example.com", "candidate-password")
     token = issue_token(user, lifetime=timedelta(seconds=30))
-    assert "." not in token
+    assert token
     assert validate_token(token).id == user.id
     assert validate_token(token, now=timezone.now() + timedelta(seconds=31)) is None
 
@@ -58,21 +57,11 @@ def test_zero_lifetime_token_is_immediately_expired():
     assert validate_token(token) is None
 
 
-def test_issuing_token_prunes_expired_sessions():
+def test_tokens_validate_independently_without_process_local_session_state():
     user = authenticate("candidate@example.com", "candidate-password")
-    expired = issue_token(user, lifetime=timedelta(seconds=-1))
-    assert expired in _tokens
-    fresh = issue_token(user)
-    assert expired not in _tokens
-    assert fresh in _tokens
-
-
-def test_concurrent_token_issuance_preserves_every_token():
-    user = authenticate("candidate@example.com", "candidate-password")
-    with ThreadPoolExecutor(max_workers=8) as executor:
-        tokens = list(executor.map(lambda _: issue_token(user), range(32)))
-    assert len(_tokens) == len(tokens)
-    assert all(validate_token(token) is user for token in tokens)
+    tokens = [issue_token(user) for _ in range(32)]
+    assert len(set(tokens)) == len(tokens)
+    assert all(validate_token(token).id == user.id for token in tokens)
 
 
 def test_login_and_protected_route_authorization():

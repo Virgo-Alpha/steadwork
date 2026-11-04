@@ -28,6 +28,15 @@ DATABASE_URL=sqlite:////tmp/steadwork.sqlite3 uv run python manage.py runserver
 
 SQLite and PostgreSQL URLs are supported. Invalid URLs and unsupported database schemes fail during settings initialization; they never fall back to the in-memory store. The smoke endpoint is `GET http://127.0.0.1:8000/api/health/` and reports the selected store.
 
+Registration, email verification, and password reset use Django's email backend.
+In local debug mode, verification/reset links are printed to the backend console.
+For a hosted deployment configure `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`,
+`EMAIL_HOST_PASSWORD`, `EMAIL_USE_TLS`, and `DEFAULT_FROM_EMAIL`; without SMTP,
+registration and reset requests report that mail delivery is unavailable. Set the
+same strong `DJANGO_SECRET_KEY` on every backend worker: signed access and one-time
+email tokens remain valid across process restarts and workers. Password reset
+increments the user's auth version and invalidates existing tokens.
+
 ## Tests and checks
 
 ```sh

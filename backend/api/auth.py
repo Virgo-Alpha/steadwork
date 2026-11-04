@@ -1,24 +1,15 @@
 """Opaque, expiring bearer authentication for the in-memory milestone."""
 
-import secrets
-from threading import RLock
 from datetime import datetime, timedelta
-from dataclasses import dataclass
 from django.conf import settings
 from django.contrib.auth.hashers import check_password
+from django.core import signing
 from django.utils import timezone
 from .models import User
 from .store import get_store
 
 
-@dataclass
-class TokenSession:
-    user_id: str
-    expires_at: datetime
-
-
-_tokens: dict[str, TokenSession] = {}
-_tokens_lock = RLock()
+_revocation_epoch = 0
 
 
 def authenticate(email: str, password: str) -> User | None:
@@ -27,29 +18,28 @@ def authenticate(email: str, password: str) -> User | None:
 
 
 def issue_token(user: User, lifetime: timedelta | None = None) -> str:
-    with _tokens_lock:
-        now = timezone.now()
-        _tokens_copy = {
-            token: session for token, session in _tokens.items() if session.expires_at > now
-        }
-        _tokens.clear()
-        _tokens.update(_tokens_copy)
-        token = secrets.token_urlsafe(32)
-        expiry = lifetime if lifetime is not None else timedelta(
-            seconds=getattr(settings, "TOKEN_LIFETIME_SECONDS", 3600)
-        )
-        _tokens[token] = TokenSession(user.id, now + expiry)
-        return token
+    expires_at = timezone.now() + (lifetime if lifetime is not None else timedelta(
+        seconds=getattr(settings, "TOKEN_LIFETIME_SECONDS", 3600)
+    ))
+    token = signing.dumps({"uid": user.id, "version": user.auth_version, "epoch": _revocation_epoch, "exp": expires_at.timestamp()},
+                          salt="steadwork.access", compress=True)
+    return token
 
 
 def validate_token(token: str, now: datetime | None = None) -> User | None:
-    with _tokens_lock:
-        session = _tokens.get(token)
-        current = now or timezone.now()
-        if not session or session.expires_at <= current:
-            _tokens.pop(token, None)
-            return None
-        return next((u for u in get_store().users if u.id == session.user_id), None)
+    try:
+        payload = signing.loads(token, salt="steadwork.access")
+    except signing.BadSignature:
+        return None
+    current = (now or timezone.now()).timestamp()
+    if not isinstance(payload, dict) or not isinstance(payload.get("exp"), (int, float)) or payload["exp"] <= current:
+        return None
+    if payload.get("epoch") != _revocation_epoch:
+        return None
+    user = next((u for u in get_store().users if u.id == payload.get("uid")), None)
+    if user is None or payload.get("version") != user.auth_version:
+        return None
+    return user
 
 
 def current_user(request) -> User | None:
@@ -65,5 +55,5 @@ def current_user(request) -> User | None:
 
 
 def revoke_all_tokens() -> None:
-    with _tokens_lock:
-        _tokens.clear()
+    global _revocation_epoch
+    _revocation_epoch += 1

@@ -27,9 +27,9 @@ class InMemoryStore:
 def _seed() -> InMemoryStore:
     return InMemoryStore(
         users=[
-            User("user-candidate", "candidate@example.com", "candidate", make_password("candidate-password")),
-            User("user-recruiter", "recruiter@example.com", "recruiter", make_password("recruiter-password")),
-            User("user-admin", "admin@example.com", "admin", make_password("admin-password")),
+            User("user-candidate", "candidate@example.com", "candidate", make_password("candidate-password"), "Demo Candidate"),
+            User("user-recruiter", "recruiter@example.com", "recruiter", make_password("recruiter-password"), "Demo Recruiter"),
+            User("user-admin", "admin@example.com", "admin", make_password("admin-password"), "Demo Admin"),
         ],
         companies=[
             Company("company-acme", "Acme Technologies", "Cloud tools for modern teams.", "https://acme.example.com", "A", "#d7eddf"),

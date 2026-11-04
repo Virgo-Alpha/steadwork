@@ -102,6 +102,10 @@ export class MockJobBoardService implements JobBoardService {
   async requestPasswordReset(email: string) {
     if (!email.trim()) throw new Error('Enter an email address.');
   }
+  async completePasswordReset(_token: string, password: string) {
+    if (password.length < 8) throw new Error('Password must contain at least 8 characters.');
+  }
+  async logout() {}
   async switchRole(role: 'candidate' | 'company') { this.state.user = role === 'company' ? { id: 'user-company', name: 'Jordan Lee', email: 'jordan@northstarlabs.dev', role: 'company' } : defaultState().user; this.persist(); return structuredClone(this.state.user); }
   async getProfile() { return structuredClone(this.state.profile); }
   async updateProfile(profile: Partial<CandidateProfile>) { this.state.profile = { ...this.state.profile, ...profile }; this.persist(); return structuredClone(this.state.profile); }
@@ -119,7 +123,7 @@ export class MockJobBoardService implements JobBoardService {
   async getEmployerDashboard(): Promise<EmployerDashboard> {
     const jobs = this.state.jobs.filter(j => j.companyId === 'c-northstar');
     const apps = this.state.applications.filter(a => jobs.some(j => j.id === a.jobId));
-    return { activeJobs: jobs.filter(j => j.status === 'Published').length, totalJobs: jobs.length, applications: apps.length, shortlisted: apps.filter(a => a.status === 'Shortlisted').length, recent: structuredClone(apps.slice(0,4)) };
+    return { companyName: 'Northstar Labs', activeJobs: jobs.filter(j => j.status === 'Published').length, totalJobs: jobs.length, applications: apps.length, shortlisted: apps.filter(a => a.status === 'Shortlisted').length, recent: structuredClone(apps.slice(0,4)) };
   }
   async listCompanyJobs() { return structuredClone(this.state.jobs.filter(j => j.companyId === 'c-northstar')); }
   async createJob(input: Partial<Job>) {

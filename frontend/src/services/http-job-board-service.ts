@@ -1,6 +1,6 @@
 import type { AccountRegistration, Application, ApplicationInput, ApplicationStatus, CandidateProfile, Company, EmployerDashboard, Job, JobFilters, JobStatus, LoginInput, Notification, User } from '../domain/types';
 import type { JobBoardService } from './job-board-service';
-import { ACCESS_TOKEN_KEY } from './session';
+import { ACCESS_TOKEN_KEY, clearSession } from './session';
 
 const USER_KEY = 'steadwork.user';
 
@@ -42,7 +42,12 @@ async function request<T>(path: string, init: RequestInit = {}, options: { prote
     const token = storage()?.getItem(ACCESS_TOKEN_KEY);
     if (token) headers.set('Authorization', `Bearer ${token}`);
   }
-  const response = await fetch(`/api${path}`, { ...init, headers });
+  let response: Response;
+  try {
+    response = await fetch(`/api${path}`, { ...init, headers });
+  } catch {
+    throw new ApiError(0, 'Could not connect to Steadwork. Check your connection and try again.');
+  }
   if (!response.ok) {
     let detail: string | undefined;
     try {
@@ -50,16 +55,19 @@ async function request<T>(path: string, init: RequestInit = {}, options: { prote
       if (body && typeof body.detail === 'string') detail = body.detail;
     } catch { /* non-JSON errors use the status fallback */ }
     if (response.status === 401) {
-      storage()?.removeItem(ACCESS_TOKEN_KEY);
-      storage()?.removeItem(USER_KEY);
+      clearSession();
+      if (options.protected && typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') window.dispatchEvent(new CustomEvent('steadwork:unauthorized'));
     }
     const fallback = response.status === 400 ? 'The request was invalid.'
-      : response.status === 401 ? 'Your session has expired. Please sign in again.'
+      : response.status === 401 ? (options.protected ? 'Please sign in to continue.' : 'Invalid email or password.')
       : response.status === 403 ? 'You do not have permission to perform this action.'
       : response.status === 404 ? 'The requested resource was not found.'
       : response.status === 409 ? 'This request conflicts with existing data.'
       : `Request failed (${response.status}).`;
-    throw new ApiError(response.status, detail || fallback, detail);
+    const message = response.status === 401 && options.protected ? fallback
+      : response.status >= 500 ? 'Something went wrong on the server. Please try again.'
+      : detail || fallback;
+    throw new ApiError(response.status, message, detail);
   }
   if (response.status === 204) return undefined as T;
   let value: unknown;
@@ -77,7 +85,7 @@ export class HttpJobBoardService implements JobBoardService {
   getJob(id: string) { return request<Job>(`/jobs/${id}/`, {}, { shape: one<Job>('job', ['id', 'title']) }); }
   getCompany(id: string) { return request<Company>(`/companies/${id}/`, {}, { shape: one<Company>('company', ['id', 'name']) }); }
   listCompanies() { return request<Company[]>('/companies/', {}, { shape: many<Company>('companies', ['id', 'name']) }); }
-  recommendJobs() { return unsupported('Job recommendations'); }
+  recommendJobs() { return protectedRequest<Job[]>('/jobs/recommended/', {}, many<Job>('recommended jobs', ['id', 'title'])); }
   saveJob(id: string) { return protectedRequest<void>('/saved-jobs/', json('POST', { jobId: id })); }
   unsaveJob(id: string) { return protectedRequest<void>(`/saved-jobs/${id}/`, json('DELETE')); }
   listSavedJobs() { return protectedRequest<Job[]>('/saved-jobs/', {}, many<Job>('saved jobs', ['id', 'title'])); }
@@ -88,7 +96,15 @@ export class HttpJobBoardService implements JobBoardService {
       return user;
     });
   }
-  registerAccount(_input: AccountRegistration) { return unsupported('Account registration'); }
+  async registerAccount(input: AccountRegistration) {
+    const envelope = object(await request<unknown>('/auth/register/', json('POST', input)), 'registration');
+    const token = envelope.access_token;
+    if (typeof token !== 'string' || !token || envelope.token_type !== 'Bearer') throw new Error('Invalid registration response.');
+    const user = one<User>('user', ['id', 'email', 'role'])(envelope.user);
+    storage()?.setItem(ACCESS_TOKEN_KEY, token);
+    storage()?.setItem(USER_KEY, JSON.stringify(user));
+    return user;
+  }
   async login(input: LoginInput) {
     const envelope = await request<unknown>('/auth/login/', json('POST', input));
     const body = object(envelope, 'login');
@@ -99,8 +115,18 @@ export class HttpJobBoardService implements JobBoardService {
     storage()?.setItem(USER_KEY, JSON.stringify(user));
     return user;
   }
-  verifyEmail(_token?: string) { return unsupported('Email verification'); }
-  requestPasswordReset(_email: string) { return unsupported('Password reset'); }
+  async verifyEmail(token?: string) {
+    const user = await request<User>('/auth/verify-email/', json('POST', { token }), { shape: one<User>('user', ['id', 'email', 'role']) });
+    storage()?.setItem(USER_KEY, JSON.stringify(user));
+    return user;
+  }
+  async requestPasswordReset(email: string) {
+    await request('/auth/password-reset/', json('POST', { email }));
+  }
+  async completePasswordReset(token: string, password: string) {
+    await request('/auth/password-reset/', json('POST', { token, password }));
+  }
+  async logout() { try { await protectedRequest<void>('/auth/logout/', json('POST')); } finally { clearSession(); } }
   switchRole(_role: 'candidate' | 'company') { return unsupported('Demo role switching'); }
   getProfile() { return protectedRequest<CandidateProfile>('/candidate/profile/', {}, one<CandidateProfile>('profile', ['userId'])); }
   updateProfile(profile: Partial<CandidateProfile>) { return protectedRequest<CandidateProfile>('/candidate/profile/', json('PATCH', profile), one<CandidateProfile>('profile', ['userId'])); }
@@ -110,7 +136,7 @@ export class HttpJobBoardService implements JobBoardService {
     return (isGuest ? request<Application>('/applications/guest/', json('POST', application), { shape: one<Application>('application', ['id', 'jobId']) }) : protectedRequest<Application>('/applications/', json('POST', application), one<Application>('application', ['id', 'jobId'])));
   }
   withdrawApplication(id: string) { return protectedRequest<Application>(`/applications/${id}/withdraw/`, json('POST'), one<Application>('application', ['id', 'jobId'])); }
-  getEmployerDashboard() { return protectedRequest<EmployerDashboard>('/employer/dashboard/', {}, one<EmployerDashboard>('dashboard', ['activeJobs', 'totalJobs', 'applications', 'shortlisted', 'recent'])); }
+  getEmployerDashboard() { return protectedRequest<EmployerDashboard>('/employer/dashboard/', {}, one<EmployerDashboard>('dashboard', ['companyName', 'activeJobs', 'totalJobs', 'applications', 'shortlisted', 'recent'])); }
   listCompanyJobs() { return protectedRequest<Job[]>('/employer/jobs/', {}, many<Job>('company jobs', ['id', 'title'])); }
   createJob(input: Partial<Job>) { return protectedRequest<Job>('/employer/jobs/', json('POST', input), one<Job>('job', ['id', 'title'])); }
   updateJob(id: string, input: Partial<Job>) { return protectedRequest<Job>(`/employer/jobs/${id}/`, json('PATCH', input), one<Job>('job', ['id', 'title'])); }

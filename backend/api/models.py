@@ -10,9 +10,13 @@ class User:
     email: str
     role: str
     password_hash: str
+    name: str = ""
+    email_verified: bool = True
+    auth_version: int = 0
 
     def to_dict(self) -> dict[str, Any]:
-        return {"id": self.id, "email": self.email, "role": self.role}
+        return {"id": self.id, "name": self.name, "email": self.email, "role": self.role,
+                "emailVerified": self.email_verified}
 
 
 @dataclass

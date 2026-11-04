@@ -1,6 +1,6 @@
 """SQLAlchemy mappings for the domain records held by the API store."""
 
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -14,6 +14,9 @@ class UserRecord(Base):
     email: Mapped[str] = mapped_column(String, unique=True, nullable=False, index=True)
     role: Mapped[str] = mapped_column(String, nullable=False)
     password_hash: Mapped[str] = mapped_column(String, nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False, default="")
+    email_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    auth_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     profile: Mapped["ProfileRecord | None"] = relationship(back_populates="user", cascade="all, delete-orphan", uselist=False)
     saved_jobs: Mapped[list["SavedJobRecord"]] = relationship(back_populates="user", cascade="all, delete-orphan")
