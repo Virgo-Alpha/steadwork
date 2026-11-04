@@ -160,7 +160,9 @@ describe('frontend journeys over the live API and Vite proxy', () => {
     input('input-account-password', 'candidate-password-123');
     await submit(document.querySelector('form')!);
     await waitFor(() => document.body.textContent?.includes('Check your inbox.') ?? false);
-    expect(document.body.textContent).toContain('new-e2e-candidate@example.com');
+    // The heading renders before the async /auth/me/ request completes.
+    // Wait for the verification page to hydrate its account-specific copy.
+    await waitFor(() => document.body.textContent?.includes('new-e2e-candidate@example.com') ?? false);
     expect(window.sessionStorage.getItem(ACCESS_TOKEN_KEY)).toBeTruthy();
     expect(document.querySelector('[data-testid="status-auth-error"]')).toBeNull();
   });
