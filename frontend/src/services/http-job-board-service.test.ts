@@ -68,8 +68,11 @@ describe('HttpJobBoardService', () => {
   it('registers through the API and stores the returned session', async () => {
     vi.mocked(fetch).mockResolvedValue(response({ access_token: 'registration-token', token_type: 'Bearer', user: { id: 'u1', name: 'A', email: 'a@example.com', role: 'candidate', emailVerified: false } }, 201));
     await expect(service.registerAccount({ name: 'A', email: 'a@example.com', password: 'long-password', role: 'candidate' })).resolves.toMatchObject({ name: 'A', emailVerified: false });
+    expect(vi.mocked(fetch).mock.calls[0][0]).toBe('/api/auth/register/');
+    expect(JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string)).toEqual({ name: 'A', email: 'a@example.com', password: 'long-password', role: 'candidate' });
     expect(new Headers(vi.mocked(fetch).mock.calls[0][1]?.headers).get('Content-Type')).toBe('application/json');
     expect(window.sessionStorage.getItem('steadwork.access_token')).toBe('registration-token');
+    expect(window.sessionStorage.getItem('steadwork.user')).toContain('a@example.com');
   });
 
   it('calls verification and password reset endpoints with the correct payloads', async () => {

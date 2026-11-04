@@ -152,6 +152,19 @@ beforeEach(async () => {
 });
 
 describe('frontend journeys over the live API and Vite proxy', () => {
+  it('submits account registration to the live API and opens the verification state', async () => {
+    await click(document.querySelector('[data-testid="link-create-account"]')!);
+    await waitFor(() => Boolean(document.querySelector('[data-testid="button-register"]')));
+    input('input-account-name', 'New E2E Candidate');
+    input('input-account-email', 'new-e2e-candidate@example.com');
+    input('input-account-password', 'candidate-password-123');
+    await submit(document.querySelector('form')!);
+    await waitFor(() => document.body.textContent?.includes('Check your inbox.') ?? false);
+    expect(document.body.textContent).toContain('new-e2e-candidate@example.com');
+    expect(window.sessionStorage.getItem(ACCESS_TOKEN_KEY)).toBeTruthy();
+    expect(document.querySelector('[data-testid="status-auth-error"]')).toBeNull();
+  });
+
   it('shows a sign-in prompt instead of calling protected application pages signed out', async () => {
     await click(document.querySelector('[data-testid="nav-applications"]')!);
     await waitFor(() => Boolean(document.querySelector('[data-testid="link-protected-sign-in"]')));

@@ -10,6 +10,7 @@ def test_root_serves_frontend_entrypoint(tmp_path: Path):
 
     assert response.status_code == 200
     assert response["Content-Type"].startswith("text/html")
+    assert response["Cache-Control"] == "no-cache, no-store, must-revalidate"
     assert b"Steadwork app" in b"".join(response.streaming_content)
 
 
@@ -20,6 +21,7 @@ def test_direct_frontend_route_falls_back_to_entrypoint(tmp_path: Path):
         response = Client().get("/jobs/job-platform")
 
     assert response.status_code == 200
+    assert response["Cache-Control"] == "no-cache, no-store, must-revalidate"
     assert b"".join(response.streaming_content).decode() == index
 
 
@@ -31,6 +33,7 @@ def test_existing_asset_is_served_with_its_content_type(tmp_path: Path):
 
     assert response.status_code == 200
     assert "javascript" in response["Content-Type"]
+    assert response["Cache-Control"] == "public, max-age=31536000, immutable"
     assert b"built asset" in b"".join(response.streaming_content)
 
 

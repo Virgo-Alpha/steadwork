@@ -29,7 +29,13 @@ def frontend_file(request, path: str = ""):
 
     if candidate.is_file():
         content_type, _ = guess_type(candidate.name)
-        return FileResponse(candidate.open("rb"), content_type=content_type or "application/octet-stream")
+        response = FileResponse(candidate.open("rb"), content_type=content_type or "application/octet-stream")
+        response["Cache-Control"] = (
+            "public, max-age=31536000, immutable"
+            if relative.startswith("assets/")
+            else "no-cache, no-store, must-revalidate"
+        )
+        return response
 
     # Vite assets live under /assets/. Missing assets and any other path with a
     # file extension must stay 404s instead of returning the SPA HTML.
@@ -39,4 +45,6 @@ def frontend_file(request, path: str = ""):
     index = _inside(root, "index.html")
     if index is None or not index.is_file():
         return HttpResponseNotFound("Not found")
-    return FileResponse(index.open("rb"), content_type="text/html; charset=utf-8")
+    response = FileResponse(index.open("rb"), content_type="text/html; charset=utf-8")
+    response["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return response
