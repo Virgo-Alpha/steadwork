@@ -350,6 +350,8 @@ button { font: inherit; cursor: pointer; }
 .job-row:hover { transform: translateY(-2px); border-color: hsl(var(--primary) / .42); box-shadow: 0 12px 28px hsl(215 31% 17% / .06); }
 .page-enter { animation: pageIn .35s ease both; }
 @keyframes pageIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.modal-backdrop { position: fixed; z-index: 50; inset: 0; display: grid; place-items: center; overflow-y: auto; overscroll-behavior: contain; padding: 16px; background: hsl(215 31% 12% / .55); }
+.modal-card { width: min(520px, 100%); max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; padding: clamp(18px, 4vw, 24px); box-shadow: 0 22px 80px #18233338; }
 .skeleton { background: linear-gradient(90deg, hsl(var(--muted)) 25%, hsl(var(--secondary)) 50%, hsl(var(--muted)) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
 @keyframes shimmer { to { background-position: -200% 0; } }
 .brand-mark { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 9px 9px 9px 3px; background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); font-family: var(--app-font-serif); font-weight: 800; }

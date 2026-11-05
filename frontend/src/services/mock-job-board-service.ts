@@ -108,7 +108,7 @@ export class MockJobBoardService implements JobBoardService {
     const application: Application = { ...applicationInput, id: `app-${Date.now()}`, candidateId: this.state.user.role === 'candidate' && !isGuest ? this.state.user.id : undefined, status: job.applicationMethod === 'External' ? 'External click' : 'Applied', createdAt: new Date().toISOString().slice(0,10) };
     this.state.applications.unshift(application); job.applicationCount++; this.persist(); return structuredClone(application);
   }
-  async withdrawApplication(id: string) { const a = this.state.applications.find(x => x.id === id); if (!a) throw new Error('Application not found'); if (!a.candidateId || a.candidateId !== this.state.user.id) throw new Error('Only signed-in candidates can withdraw an application.'); a.status = 'Withdrawn'; this.persist(); return structuredClone(a); }
+  async withdrawApplication(id: string) { const a = this.state.applications.find(x => x.id === id); if (!a) throw new Error('Application not found'); if (!a.candidateId || a.candidateId !== this.state.user.id) throw new Error('Only signed-in candidates can withdraw an application.'); if (!['Applied', 'Under Review', 'Shortlisted'].includes(a.status)) throw new Error('This application can no longer be withdrawn.'); a.status = 'Withdrawn'; this.persist(); return structuredClone(a); }
   async getEmployerDashboard(): Promise<EmployerDashboard> {
     const jobs = this.state.jobs.filter(j => j.companyId === 'c-northstar');
     const apps = this.state.applications.filter(a => jobs.some(j => j.id === a.jobId));

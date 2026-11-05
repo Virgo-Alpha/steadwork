@@ -1,6 +1,7 @@
-import { useEffect, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
 import { Link, Route, Switch, useLocation, useParams, Router as WouterRouter } from 'wouter';
 import { ArrowDownUp, ArrowLeft, ArrowRight, Bell, Bookmark, BriefcaseBusiness, Check, CircleUserRound, ClipboardList, ExternalLink, Filter, MapPin, Search, Sparkles, TrendingUp, Users, X } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import { jobBoardService as service } from '@/services';
 import { hasSessionToken } from '@/services/session';
 import type { Application, ApplicationStatus, CandidateProfile, Job, JobFilters, JobStatus, Notification, User } from '@/domain/types';
@@ -100,10 +101,14 @@ function PageTitle({ kicker, title, subtitle, side }: { kicker?: string; title: 
   return <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'end', gap: 18, flexWrap: 'wrap', marginBottom: 28 }}><div>{kicker && <div className="eyebrow" style={{ marginBottom: 10 }}>{kicker}</div>}<h1 className="font-display" style={{ fontSize: 'clamp(30px, 4vw, 42px)', lineHeight: 1.08, letterSpacing: '-.055em', margin: 0 }}>{title}</h1>{subtitle && <p style={{ color: 'hsl(var(--muted-foreground))', margin: '10px 0 0', fontSize: 14 }}>{subtitle}</p>}</div>{side}</div>;
 }
 function formatSalary(job: Job) { return `$${Math.round(job.salaryMin/1000)}k–$${Math.round(job.salaryMax/1000)}k`; }
+function canWithdrawApplication(status: ApplicationStatus) { return ['Applied', 'Under Review', 'Shortlisted'].includes(status); }
 function CompanyMark({ name, logo, accent }: { name: string; logo: string; accent: string }) {
   return <div aria-label={`${name} logo`} style={{ flex: '0 0 auto', width: 46, height: 46, display: 'grid', placeItems: 'center', borderRadius: 12, background: accent, color: 'hsl(var(--foreground))', fontFamily: 'var(--app-font-serif)', fontSize: 20, fontWeight: 800 }}>{logo}</div>;
 }
-function JobCard({ job, saved = false, onSave }: { job: Job; saved?: boolean; onSave?: (id: string) => void }) {
+function useCandidateApplications(user: User | null | undefined) {
+  return useLoad(() => user?.role === 'candidate' ? service.listApplications() : Promise.resolve([]), [user?.id, user?.role]);
+}
+function JobCard({ job, saved = false, application, onSave }: { job: Job; saved?: boolean; application?: Application; onSave?: (id: string) => void }) {
   const company = useLoad(() => service.getCompany(job.companyId), [job.companyId]);
   return <article className="surface job-row" data-testid={`card-job-${job.id}`} style={{ padding: '19px 20px', display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 15, alignItems: 'start' }}>
     <CompanyMark name={company.data?.name || 'Company'} logo={company.data?.logo || '?'} accent={company.data?.accent || '#e2e7e0'}/>
@@ -111,6 +116,7 @@ function JobCard({ job, saved = false, onSave }: { job: Job; saved?: boolean; on
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
         <Link href={`/jobs/${job.id}`} data-testid={`link-job-${job.id}`} style={{ fontFamily: 'var(--app-font-serif)', fontWeight: 800, fontSize: 17, letterSpacing: '-.025em' }}>{job.title}</Link>
         <span className="tag">{job.remotePolicy}</span>
+        {application && <StatusPill value={application.status} testId={`application-status-${job.id}`}/>}
       </div>
       <div style={{ color: 'hsl(var(--muted-foreground))', fontSize: 12, marginTop: 5 }}>{company.error ? <span role="alert">{company.error}</span> : company.data?.name || 'Loading company'} <span style={{ margin: '0 5px' }}>·</span> {job.location} <span style={{ margin: '0 5px' }}>·</span> {job.jobType}</div>
       <div style={{ color: 'hsl(var(--foreground))', fontSize: 12, fontWeight: 700, marginTop: 11 }}>{formatSalary(job)} <span style={{ color: 'hsl(var(--muted-foreground))', fontWeight: 500 }}>· {job.experienceLevel} level</span></div>
@@ -131,6 +137,8 @@ function HomePage() {
   const [error, setError] = useState('');
   const mockMode = import.meta.env.VITE_DATA_MODE === 'mock';
   const { data: currentUser } = useLoad(() => mockMode || hasSessionToken() ? service.getCurrentUser() : Promise.resolve(null));
+  const { data: applications } = useCandidateApplications(currentUser);
+  const applicationByJob = new Map((applications || []).map(application => [application.jobId, application]));
   const canUseCandidateFeatures = mockMode ? currentUser?.role !== 'company' : !hasSessionToken() || currentUser?.role === 'candidate';
   const { data: jobs, loading, reload } = useLoad(() => service.listJobs(form), [JSON.stringify(form)]);
   const { data: saved, error: savedError, reload: reloadSaved } = useLoad(() => (mockMode || hasSessionToken()) && canUseCandidateFeatures ? service.listSavedJobs() : Promise.resolve([]), [canUseCandidateFeatures]);
@@ -155,10 +163,10 @@ function HomePage() {
     </section>
     <section className="discovery-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 270px', gap: 27, alignItems: 'start' }}>
       <div>
-        <PageTitle kicker="The shortlist" title="Roles worth a closer look" subtitle={`${jobs?.length ?? 0} open positions from teams building with care.`} side={<label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, color: 'hsl(var(--muted-foreground))' }}><ArrowDownUp size={15}/><select aria-label="Sort jobs" data-testid="select-sort" className="field" style={{ width: 145, minHeight: 36, padding: '6px 8px' }} value={form.sort || 'recent'} onChange={e => change('sort', e.target.value)}><option value="recent">Most recent</option><option value="salary">Salary: high first</option></select></label>}/>
+        <PageTitle kicker="The shortlist" title="Roles worth a closer look" subtitle={`${jobs?.length ?? 0} open positions from teams building with care.`} side={<div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}><label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, color: 'hsl(var(--muted-foreground))' }}><ArrowDownUp size={15}/><select aria-label="Sort jobs" data-testid="select-sort" className="field" style={{ width: 145, minHeight: 36, padding: '6px 8px' }} value={form.sort || 'recent'} onChange={e => change('sort', e.target.value)}><option value="recent">Most recent</option><option value="salary">Salary: high first</option></select></label><button className="btn btn-outline" data-testid="button-clear-filters" onClick={() => { setForm({ sort: 'recent' }); setDraftKeyword(''); setSkillsText(''); }}>Clear filters</button></div>}/>
         {error && <ErrorState message={error} retry={() => setError('')}/>}
         {savedError && <ErrorState message={savedError} retry={reloadSaved}/>}
-        {loading ? <JobSkeleton/> : jobs?.length ? <div style={{ display: 'grid', gap: 12 }}>{jobs.map(job => <JobCard key={job.id} job={job} saved={savedIds.includes(job.id)} onSave={canUseCandidateFeatures ? save : undefined}/>)}</div> : <EmptyState title="No roles match just yet" body="Try widening your filters or removing a skill to see more possibilities." action={<button className="btn btn-outline" onClick={() => { setForm({ sort: 'recent' }); setDraftKeyword(''); setSkillsText(''); }}>Clear all filters</button>}/>}
+        {loading ? <JobSkeleton/> : jobs?.length ? <div style={{ display: 'grid', gap: 12 }}>{jobs.map(job => <JobCard key={job.id} job={job} application={applicationByJob.get(job.id)} saved={savedIds.includes(job.id)} onSave={canUseCandidateFeatures ? save : undefined}/>)}</div> : <EmptyState title="No roles match just yet" body="Try widening your filters or removing a skill to see more possibilities." action={<button className="btn btn-outline" data-testid="button-clear-empty-filters" onClick={() => { setForm({ sort: 'recent' }); setDraftKeyword(''); setSkillsText(''); }}>Clear all filters</button>}/>}
       </div>
       <aside style={{ display: 'grid', gap: 16 }}>
         <div className="surface" style={{ padding: 17 }}>
@@ -194,29 +202,87 @@ function JobDetailPage() {
   const [, setLocation] = useLocation();
   const mockMode = import.meta.env.VITE_DATA_MODE === 'mock';
   const { data: job, loading, reload } = useLoad(() => service.getJob(id), [id]);
-  const { data: user } = useLoad(() => hasSessionToken() || mockMode ? service.getCurrentUser() : Promise.resolve(null));
+  const { data: user, loading: userLoading } = useLoad(() => hasSessionToken() || mockMode ? service.getCurrentUser() : Promise.resolve(null));
   const { data: profile } = useLoad(() => user?.role === 'candidate' ? service.getProfile() : Promise.resolve(null), [user?.role]);
+  const { data: candidateApplications, loading: candidateApplicationsLoading } = useCandidateApplications(user);
   const [company, setCompany] = useState<{ name: string; description: string; website: string; logo: string; accent: string } | null>(null);
   const [saved, setSaved] = useState(false);
   const [applyOpen, setApplyOpen] = useState(false);
   const [applyAsGuest, setApplyAsGuest] = useState(false);
   const [feedback, setFeedback] = useState('');
   const [err, setErr] = useState('');
+  const [localApplication, setLocalApplication] = useState<Application | null>(null);
+  const [confirmWithdraw, setConfirmWithdraw] = useState(false);
+  const applyButtonRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const candidateApplication = localApplication || candidateApplications?.find(application => application.jobId === id);
   useEffect(() => { if (job) service.getCompany(job.companyId).then(c => c && setCompany(c)).catch(reason => setFeedback(reason instanceof Error ? reason.message : 'Could not load company details.')); }, [job]);
   useEffect(() => {
     if (user?.role !== 'candidate') return;
     service.listSavedJobs().then(xs => setSaved(xs.some(x => x.id === id))).catch(reason => setFeedback(reason instanceof Error ? reason.message : 'Could not load saved roles.'));
   }, [id, user?.role]);
+  useEffect(() => {
+    if (!applyOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const getFocusable = () => [...(dialogRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href]') || [])];
+    getFocusable()[0]?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); setApplyOpen(false); return; }
+      if (event.key !== 'Tab') return;
+      const items = getFocusable();
+      if (!items.length) return;
+      if (event.shiftKey && document.activeElement === items[0]) { event.preventDefault(); items[items.length - 1].focus(); }
+      else if (!event.shiftKey && document.activeElement === items[items.length - 1]) { event.preventDefault(); items[0].focus(); }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener('keydown', onKeyDown);
+      applyButtonRef.current?.focus();
+    };
+  }, [applyOpen]);
   if (loading) return <div className="main-wrap" style={{ paddingTop: 50 }}><JobSkeleton/></div>;
   if (!job) return <div className="main-wrap page-enter" style={{ paddingTop: 50 }}><EmptyState title="This role has moved on" body="The listing may have closed or the link may be out of date." action={<Link className="btn btn-primary" href="/">Browse open roles</Link>}/></div>;
   const toggleSaved = async () => { if (!hasSessionToken() && !mockMode) { setLocation(`/login?returnTo=${encodeURIComponent(`/jobs/${id}`)}`); return; } try { if (saved) await service.unsaveJob(id); else await service.saveJob(id); setSaved(!saved); setFeedback(saved ? 'Removed from your saved roles' : 'Saved for later'); } catch (reason) { setFeedback(reason instanceof Error ? reason.message : 'Could not update saved roles.'); } };
   const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault(); const form = new FormData(e.currentTarget);
+    setErr('');
     try {
       if (job.applicationMethod === 'External' && job.externalApplyUrl) window.open(job.externalApplyUrl, '_blank', 'noopener,noreferrer');
-      await service.submitApplication({ jobId: job.id, candidateName: String(form.get('name')), candidateEmail: String(form.get('email')), cvName: String(form.get('cv')), coverLetter: String(form.get('cover')), isGuest: applyAsGuest });
-      setApplyOpen(false); setFeedback(job.applicationMethod === 'External' ? 'Application click recorded. Continue on the company site.' : 'Your application is in. You can track it in Applications.');
-    } catch (e) { setErr(e instanceof Error ? e.message : 'Could not submit application'); }
+      const created = await service.submitApplication({ jobId: job.id, candidateName: String(form.get('name')), candidateEmail: String(form.get('email')), cvName: String(form.get('cv')), coverLetter: String(form.get('cover')), isGuest: applyAsGuest });
+      setLocalApplication(created);
+      setApplyOpen(false);
+      setFeedback(job.applicationMethod === 'External'
+        ? 'External apply link opened and the click was recorded. This does not confirm an application on the company site.'
+        : applyAsGuest ? 'Your application was submitted. Guest applications are not shown in Applications.' : 'Your application is in. You can track it in Applications.');
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : 'Could not submit application.';
+      if ((reason as { status?: number })?.status === 409 && user?.role === 'candidate' && !applyAsGuest) {
+        try {
+          const latest = await service.listApplications();
+          const existing = latest.find(application => application.jobId === id);
+          if (existing) {
+            setLocalApplication(existing);
+            setApplyOpen(false);
+            setFeedback(`You already applied to this job. Current status: ${existing.status}.`);
+            return;
+          }
+        } catch { /* retain the original conflict message */ }
+      }
+      setErr(message);
+    }
+  };
+  const withdraw = async () => {
+    if (!candidateApplication || !canWithdrawApplication(candidateApplication.status)) return;
+    try {
+      const updated = await service.withdrawApplication(candidateApplication.id);
+      setLocalApplication(updated);
+      setConfirmWithdraw(false);
+      setFeedback('Application withdrawn. You cannot reapply to this job.');
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : 'Could not withdraw the application.');
+    }
   };
   const companyInfo = company || { name: 'Loading company', description: '', website: '', logo: '?', accent: '#eee' };
   return <div className="main-wrap page-enter" style={{ paddingTop: 34 }}>
@@ -227,10 +293,11 @@ function JobDetailPage() {
         <div className="eyebrow">Open role · {job.experienceLevel}</div><h1 className="font-display" data-testid="text-job-title" style={{ fontSize: 'clamp(34px, 5vw, 52px)', lineHeight: 1.03, letterSpacing: '-.06em', margin: '10px 0 12px' }}>{job.title}</h1>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', color: 'hsl(var(--muted-foreground))', fontSize: 12 }}><span>{job.location}</span><span>·</span><span>{job.remotePolicy}</span><span>·</span><span>{job.jobType}</span><span>·</span><span>{formatSalary(job)}</span></div>
       </div>
-      <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap' }}>{(!hasSessionToken() && !mockMode || user?.role === 'candidate') && <button className="btn btn-outline" data-testid="button-detail-save" onClick={toggleSaved}><Bookmark size={15} fill={saved ? 'currentColor' : 'none'}/>{saved ? 'Saved' : 'Save role'}</button>}<button className="btn btn-primary" data-testid="button-open-application" onClick={() => { setApplyAsGuest(isEmployerRole(user?.role || '')); setApplyOpen(true); }}>Apply now <ArrowRight size={15}/></button></div>
+      <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap', alignItems: 'center' }}>{(!hasSessionToken() && !mockMode || user?.role === 'candidate') && <button className="btn btn-outline" data-testid="button-detail-save" onClick={toggleSaved}><Bookmark size={15} fill={saved ? 'currentColor' : 'none'}/>{saved ? 'Saved' : 'Save role'}</button>}{candidateApplication ? <><StatusPill value={candidateApplication.status} testId="status-detail-application"/>{canWithdrawApplication(candidateApplication.status) && <button className="btn btn-outline" data-testid="button-detail-withdraw" onClick={() => setConfirmWithdraw(true)}>Withdraw</button>}<Link className="btn btn-quiet" data-testid="link-detail-applications" href="/applications">View applications</Link></> : <button ref={applyButtonRef} className="btn btn-primary" data-testid="button-open-application" disabled={(hasSessionToken() || mockMode) && (userLoading || candidateApplicationsLoading)} onClick={() => { setErr(''); setApplyAsGuest(isEmployerRole(user?.role || '')); setApplyOpen(true); }}>Apply now <ArrowRight size={15}/></button>}</div>
     </section>
     {feedback && <div className="surface" role="status" data-testid="status-application-feedback" style={{ padding: 13, marginTop: 12, color: 'hsl(var(--primary))' }}>{feedback}</div>}
-    {err && <ErrorState message={err} retry={() => setErr('')}/>}
+    {err && !applyOpen && <ErrorState message={err} retry={() => setErr('')}/>}
+    {confirmWithdraw && <div className="surface" role="group" aria-label="Confirm application withdrawal" style={{ padding: 14, marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}><span style={{ fontSize: 13 }}>Withdraw this application? You cannot reapply to this job.</span><div style={{ display: 'flex', gap: 8 }}><button className="btn btn-quiet" data-testid="button-cancel-detail-withdraw" onClick={() => setConfirmWithdraw(false)}>Keep application</button><button className="btn btn-outline" data-testid="button-confirm-detail-withdraw" onClick={() => void withdraw()}>Withdraw application</button></div></div>}
     <div className="detail-layout" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 280px', gap: 28, marginTop: 27 }}>
       <article style={{ display: 'grid', gap: 24, alignContent: 'start' }}>
         <InfoSection title="The opportunity"><p>{job.description}</p></InfoSection>
@@ -244,87 +311,102 @@ function JobDetailPage() {
         <div className="surface" style={{ padding: 18, background: 'hsl(var(--secondary))' }}><strong style={{ fontSize: 13 }}>{companyInfo.name}</strong><p style={{ fontSize: 12, lineHeight: 1.6, color: 'hsl(var(--muted-foreground))' }}>{companyInfo.description}</p><a href={`https://${companyInfo.website}`} target="_blank" rel="noreferrer" className="nav-link" data-testid="link-company-website" style={{ display: 'inline-flex', gap: 6, alignItems: 'center', fontSize: 11 }}>Company website <ExternalLink size={13}/></a></div>
       </aside>
     </div>
-    {applyOpen && <div role="dialog" aria-modal="true" aria-labelledby="apply-heading" style={modalBackdrop}><form className="surface" onSubmit={submit} style={{ width: 'min(520px, 100%)', padding: 24, display: 'grid', gap: 13, boxShadow: '0 22px 80px #18233338' }}><div style={{ display: 'flex', justifyContent: 'space-between' }}><div><div className="eyebrow">{job.applicationMethod === 'External' ? 'Track your interest' : 'A good next step'}</div><h2 id="apply-heading" className="font-display" style={{ margin: '5px 0', fontSize: 25 }}>Apply to {job.title}</h2></div><button type="button" className="btn btn-quiet" data-testid="button-close-application" onClick={() => setApplyOpen(false)}><X size={18}/></button></div>
-      <label style={{ display: 'flex', gap: 9, alignItems: 'flex-start', fontSize: 12, color: 'hsl(var(--muted-foreground))' }}><input type="checkbox" data-testid="checkbox-guest-application" checked={applyAsGuest} onChange={e => setApplyAsGuest(e.target.checked)}/><span><strong>Apply as a guest</strong><br/>You’ll receive a confirmation, but won’t be able to track this application.</span></label><label className="form-label">Your name<input key={applyAsGuest ? 'guest-name' : 'candidate-name'} className="field" required name="name" defaultValue={applyAsGuest ? '' : user?.name || ''} data-testid="input-applicant-name"/></label><label className="form-label">Email address<input key={applyAsGuest ? 'guest-email' : 'candidate-email'} className="field" required type="email" name="email" defaultValue={applyAsGuest ? '' : user?.email || ''} data-testid="input-applicant-email"/></label><label className="form-label">Resume filename (metadata only)<select className="field" name="cv" data-testid="select-cv" defaultValue={profile?.defaultCvId || profile?.cvFiles[0] || ''}>{(profile?.cvFiles || []).map(cv => <option key={cv} value={cv}>{cv}</option>)}</select></label><label className="form-label">A note for the team (optional)<textarea className="field" rows={4} name="cover" placeholder="What caught your eye about this role?" data-testid="input-cover-letter"/></label><div style={{ display: 'flex', justifyContent: 'end', gap: 8 }}><button type="button" className="btn btn-outline" onClick={() => setApplyOpen(false)}>Not now</button><button className="btn btn-primary" data-testid="button-submit-application">{job.applicationMethod === 'External' ? 'Continue to company' : 'Send application'} <ArrowRight size={14}/></button></div>
-    </form></div>}
+    {applyOpen && createPortal(<div className="modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setApplyOpen(false); }}><div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="apply-heading" className="surface modal-card"><form onSubmit={submit} style={{ display: 'grid', gap: 13 }}><div style={{ display: 'flex', justifyContent: 'space-between' }}><div><div className="eyebrow">{job.applicationMethod === 'External' ? 'Track your interest' : 'A good next step'}</div><h2 id="apply-heading" className="font-display" style={{ margin: '5px 0', fontSize: 25 }}>Apply to {job.title}</h2></div><button type="button" className="btn btn-quiet" data-testid="button-close-application" aria-label="Close application form" onClick={() => setApplyOpen(false)}><X size={18}/></button></div>
+      {err && <div role="alert" data-testid="status-application-error" style={{ color: 'hsl(var(--destructive))', fontSize: 12 }}>{err}</div>}
+      <label style={{ display: 'flex', gap: 9, alignItems: 'flex-start', fontSize: 12, color: 'hsl(var(--muted-foreground))' }}><input type="checkbox" data-testid="checkbox-guest-application" checked={applyAsGuest} onChange={e => setApplyAsGuest(e.target.checked)}/><span><strong>Apply as a guest</strong><br/>Guest applications are not shown in Applications. Email confirmation is currently unavailable.</span></label><label className="form-label">Your name<input key={applyAsGuest ? 'guest-name' : 'candidate-name'} className="field" required name="name" defaultValue={applyAsGuest ? '' : user?.name || ''} data-testid="input-applicant-name"/></label><label className="form-label">Email address<input key={applyAsGuest ? 'guest-email' : 'candidate-email'} className="field" required type="email" name="email" defaultValue={applyAsGuest ? '' : user?.email || ''} data-testid="input-applicant-email"/></label><label className="form-label">Resume filename (metadata only)<input className="field" name="cv" list="application-cv-options" required data-testid="select-cv" defaultValue={profile?.defaultCvId || profile?.cvFiles[0] || ''} placeholder="e.g. Resume.pdf"/><datalist id="application-cv-options">{(profile?.cvFiles || []).map(cv => <option key={cv} value={cv}/>)}</datalist><small style={{ color: 'hsl(var(--muted-foreground))' }}>Enter a filename or choose one from your profile. The file itself is not uploaded.</small></label><label className="form-label">A note for the team (optional)<textarea className="field" rows={4} name="cover" placeholder="What caught your eye about this role?" data-testid="input-cover-letter"/></label><div style={{ display: 'flex', justifyContent: 'end', gap: 8 }}><button type="button" className="btn btn-outline" onClick={() => setApplyOpen(false)}>Not now</button><button className="btn btn-primary" data-testid="button-submit-application">{job.applicationMethod === 'External' ? 'Continue to company' : 'Send application'} <ArrowRight size={14}/></button></div>
+    </form></div></div>, document.body)}
   </div>;
 }
 function InfoSection({ title, children }: { title: string; children: ReactNode }) { return <section><h2 className="font-display" style={{ fontSize: 22, margin: '0 0 10px', letterSpacing: '-.04em' }}>{title}</h2><div style={{ color: 'hsl(var(--muted-foreground))', fontSize: 14, lineHeight: 1.75 }}>{children}</div></section>; }
 function DetailLine({ label, value }: { label: string; value: string }) { return <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, borderTop: '1px solid hsl(var(--border))', padding: '10px 0', fontSize: 11 }}><span style={{ color: 'hsl(var(--muted-foreground))' }}>{label}</span><strong>{value}</strong></div>; }
-const modalBackdrop: CSSProperties = { position: 'fixed', zIndex: 40, inset: 0, display: 'grid', placeItems: 'center', padding: 16, background: 'hsl(215 31% 12% / .48)' };
 function SavedPage() {
   const { data, loading, error, reload } = useLoad(() => hasSessionToken() ? service.listSavedJobs() : Promise.resolve([]));
+  const { data: user } = useLoad(() => hasSessionToken() ? service.getCurrentUser() : Promise.resolve(null));
+  const { data: applications } = useCandidateApplications(user);
+  const applicationByJob = new Map((applications || []).map(application => [application.jobId, application]));
   const [saved, setSaved] = useState<Job[]>([]);
   const [notice, setNotice] = useState('');
   useEffect(() => setSaved(data || []), [data]);
   const remove = async (id: string) => { try { await service.unsaveJob(id); setSaved(x => x.filter(j => j.id !== id)); } catch (reason) { setNotice(reason instanceof Error ? reason.message : 'Could not remove saved role.'); } };
   return <div className="main-wrap page-enter" style={{ paddingTop: 42, maxWidth: 850 }}><PageTitle kicker="For later" title="Your saved roles" subtitle="Good possibilities, kept in one place."/>
     {notice && <div role="alert" style={{ marginBottom: 12, color: 'hsl(var(--destructive))', fontSize: 12 }}>{notice}</div>}
-    {loading ? <JobSkeleton/> : error ? <ErrorState message={error} retry={reload}/> : saved.length ? <div style={{ display: 'grid', gap: 12 }}>{saved.map(j => <JobCard key={j.id} job={j} saved onSave={remove}/>)}</div> : <EmptyState title="Nothing saved yet" body="When a role catches your eye, save it here and come back when you're ready." action={<Link href="/" className="btn btn-primary">Explore roles <ArrowRight size={14}/></Link>}/>}
+    {loading ? <JobSkeleton/> : error ? <ErrorState message={error} retry={reload}/> : saved.length ? <div style={{ display: 'grid', gap: 12 }}>{saved.map(j => <JobCard key={j.id} job={j} application={applicationByJob.get(j.id)} saved onSave={remove}/>)}</div> : <EmptyState title="Nothing saved yet" body="When a role catches your eye, save it here and come back when you're ready." action={<Link href="/" className="btn btn-primary">Explore roles <ArrowRight size={14}/></Link>}/>}
   </div>;
 }
 function ApplicationsPage() {
   const { data, loading, error, reload } = useLoad(() => service.listApplications());
   const [applications, setApplications] = useState<Application[]>([]);
   const [filter, setFilter] = useState('All');
+  const [dateFilter, setDateFilter] = useState('All');
+  const [notice, setNotice] = useState('');
+  const [withdrawing, setWithdrawing] = useState<string | null>(null);
   useEffect(() => setApplications(data || []), [data]);
-  const withdraw = async (id: string) => { if (!window.confirm('Withdraw this application? This cannot be undone.')) return; try { const a = await service.withdrawApplication(id); setApplications(xs => xs.map(x => x.id === id ? a : x)); } catch(e) { window.alert(e instanceof Error ? e.message : 'Could not withdraw'); } };
-  const filtered = applications.filter(a => filter === 'All' || a.status === filter);
-  return <div className="main-wrap page-enter" style={{ paddingTop: 42, maxWidth: 950 }}><PageTitle kicker="Your search, organized" title="Application tracker" subtitle="A clear view of where things stand." side={<select className="field" style={{ width: 170 }} data-testid="filter-application-status" value={filter} onChange={e => setFilter(e.target.value)}><option>All</option>{['Applied','Under Review','Shortlisted','Rejected','Hired','Withdrawn','External click'].map(x => <option key={x}>{x}</option>)}</select>}/>
+  const withdraw = async (id: string) => { try { const a = await service.withdrawApplication(id); setApplications(xs => xs.map(x => x.id === id ? a : x)); setNotice('Application withdrawn. You cannot reapply to this job.'); } catch(e) { setNotice(e instanceof Error ? e.message : 'Could not withdraw application.'); } finally { setWithdrawing(null); } };
+  const filtered = applications.filter(a => {
+    if (filter !== 'All' && a.status !== filter) return false;
+    if (dateFilter === 'All') return true;
+    const days = Number(dateFilter);
+    const age = Date.now() - new Date(a.createdAt).getTime();
+    return Number.isFinite(age) && age >= 0 && age <= days * 86400000;
+  });
+  return <div className="main-wrap page-enter" style={{ paddingTop: 42, maxWidth: 950 }}><PageTitle kicker="Your search, organized" title="Application tracker" subtitle="A clear view of where things stand." side={<div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><select aria-label="Filter applications by status" className="field" style={{ width: 170 }} data-testid="filter-application-status" value={filter} onChange={e => setFilter(e.target.value)}><option>All</option>{['Applied','Under Review','Shortlisted','Rejected','Hired','Withdrawn','External click'].map(x => <option key={x}>{x}</option>)}</select><select aria-label="Filter applications by date" className="field" style={{ width: 150 }} data-testid="filter-application-date" value={dateFilter} onChange={e => setDateFilter(e.target.value)}><option value="All">Any time</option><option value="7">Past week</option><option value="30">Past month</option></select></div>}/>
+    {notice && <div role="status" data-testid="status-application-feedback" style={{ marginBottom: 12, color: 'hsl(var(--primary))', fontSize: 12 }}>{notice}</div>}
     {loading ? <div className="surface skeleton" style={{ height: 180 }}/> : error ? <ErrorState message={error} retry={reload}/> : filtered.length ? <div className="surface" style={{ overflow: 'hidden' }}>{filtered.map((a,i) => {
-      return <ApplicationRow key={a.id} application={a} last={i === filtered.length - 1} onWithdraw={() => withdraw(a.id)}/>;
-    })}</div> : <EmptyState title="A fresh page" body="Your applications will show up here when you apply. We'll keep every update easy to find." action={<Link className="btn btn-primary" href="/">Find a role <ArrowRight size={14}/></Link>}/>}
+      return <ApplicationRow key={a.id} application={a} last={i === filtered.length - 1} confirming={withdrawing === a.id} onRequestWithdraw={() => setWithdrawing(a.id)} onCancelWithdraw={() => setWithdrawing(null)} onConfirmWithdraw={() => void withdraw(a.id)}/>;
+    })}</div> : applications.length ? <EmptyState title="No applications match" body="Try changing your status or date filters." action={<button className="btn btn-outline" onClick={() => { setFilter('All'); setDateFilter('All'); }}>Clear filters</button>}/> : <EmptyState title="A fresh page" body="Your applications will show up here when you apply. We'll keep every update easy to find." action={<Link className="btn btn-primary" href="/">Find a role <ArrowRight size={14}/></Link>}/>}
   </div>;
 }
-function ApplicationRow({ application, last, onWithdraw }: { application: Application; last: boolean; onWithdraw: () => void }) {
+function ApplicationRow({ application, last, confirming, onRequestWithdraw, onCancelWithdraw, onConfirmWithdraw }: { application: Application; last: boolean; confirming: boolean; onRequestWithdraw: () => void; onCancelWithdraw: () => void; onConfirmWithdraw: () => void }) {
   const { data: job } = useLoad(() => service.getJob(application.jobId), [application.jobId]);
-  const color = application.status === 'Shortlisted' || application.status === 'Hired' ? 'green' : application.status === 'Rejected' || application.status === 'Withdrawn' ? 'red' : application.status === 'Under Review' ? 'orange' : '';
-  return <div data-testid={`row-application-${application.id}`} style={{ display: 'grid', gridTemplateColumns: '1fr auto', padding: '18px 20px', gap: 15, borderBottom: last ? 0 : '1px solid hsl(var(--border))', alignItems: 'center' }}><div><Link href={`/jobs/${application.jobId}`} style={{ fontFamily: 'var(--app-font-serif)', fontSize: 16, fontWeight: 800 }}>{job?.title || 'Role application'}</Link><div style={{ fontSize: 12, color: 'hsl(var(--muted-foreground))', marginTop: 5 }}>{application.candidateName} · {new Date(application.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div></div><div style={{ display: 'flex', alignItems: 'center', gap: 12 }}><span className={`status-pill ${color}`} data-testid={`status-application-${application.id}`}>{application.status}</span>{application.status !== 'Withdrawn' && application.status !== 'External click' && <button className="btn btn-quiet" data-testid={`button-withdraw-${application.id}`} onClick={onWithdraw} style={{ fontSize: 11 }}>Withdraw</button>}</div></div>;
+  return <div data-testid={`row-application-${application.id}`} style={{ display: 'grid', gridTemplateColumns: '1fr auto', padding: '18px 20px', gap: 15, borderBottom: last ? 0 : '1px solid hsl(var(--border))', alignItems: 'center' }}><div><Link href={`/jobs/${application.jobId}`} style={{ fontFamily: 'var(--app-font-serif)', fontSize: 16, fontWeight: 800 }}>{job?.title || 'Role application'}</Link><div style={{ fontSize: 12, color: 'hsl(var(--muted-foreground))', marginTop: 5 }}>{application.candidateName} · {new Date(application.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div></div><div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}><StatusPill value={application.status} testId={`status-application-${application.id}`}/>{canWithdrawApplication(application.status) && (confirming ? <div role="group" aria-label="Confirm application withdrawal" style={{ display: 'flex', gap: 6 }}><button className="btn btn-quiet" data-testid={`button-cancel-withdraw-${application.id}`} onClick={onCancelWithdraw}>Keep</button><button className="btn btn-outline" data-testid={`button-confirm-withdraw-${application.id}`} onClick={onConfirmWithdraw}>Confirm withdrawal</button></div> : <button className="btn btn-quiet" data-testid={`button-withdraw-${application.id}`} onClick={onRequestWithdraw} style={{ fontSize: 11 }}>Withdraw</button>)}</div></div>;
 }
 function ProfilePage() {
   const { data, loading, error, reload } = useLoad(() => hasSessionToken() ? service.getProfile() : Promise.resolve(null));
   const [profile, setProfile] = useState<CandidateProfile | null>(null);
+  const [savedProfile, setSavedProfile] = useState<CandidateProfile | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
-  useEffect(() => { data && setProfile(data); }, [data]);
-  if (loading || !profile) return <div className="main-wrap" style={{ paddingTop: 45 }}><div className="surface skeleton" style={{ height: 360 }}/></div>;
+  useEffect(() => { if (data) { setProfile(data); setSavedProfile(data); } }, [data]);
+  if (loading) return <div className="main-wrap" style={{ paddingTop: 45 }}><div className="surface skeleton" style={{ height: 360 }}/></div>;
   if (error) return <div className="main-wrap" style={{ paddingTop: 45 }}><ErrorState message={error} retry={reload}/></div>;
-  const save = async (e: FormEvent) => { e.preventDefault(); try { await service.updateProfile(profile); setMessage('Profile saved — your recommendations now reflect these details.'); } catch { setMessage('We could not save your profile. Please try again.'); } };
+  if (!profile || !savedProfile) return <div className="main-wrap" style={{ paddingTop: 45 }}><ErrorState message="Your profile could not be loaded." retry={reload}/></div>;
+  const save = async (e: FormEvent) => { e.preventDefault(); setSaving(true); try { const updated = await service.updateProfile(profile); const merged = { ...savedProfile, ...updated }; setProfile(merged); setSavedProfile(merged); setEditing(false); setMessage('Profile saved — your recommendations now reflect these details.'); } catch { setMessage('We could not save your profile. Please try again.'); } finally { setSaving(false); } };
+  const cancel = () => { setProfile(savedProfile); setEditing(false); setMessage(''); };
   const setField = (key: keyof CandidateProfile, value: string | string[]) => setProfile(p => p ? { ...p, [key]: value } : p);
-  const addCv = async (file: File | undefined) => {
+  const addCv = (file: File | undefined) => {
     if (!file || profile.cvFiles.includes(file.name)) return;
     const cvFiles = [...profile.cvFiles, file.name];
     const defaultCvId = profile.defaultCvId || file.name;
-    try {
-      await service.updateProfile({ cvFiles, defaultCvId });
-      setProfile(current => current ? { ...current, cvFiles, defaultCvId } : current);
-      setMessage(`Added ${file.name} to the demo CV library. Only the filename is saved; file upload is not connected yet.`);
-    } catch {
-      setMessage('The CV could not be added. Please try again.');
-    }
+    setProfile(current => current ? { ...current, cvFiles, defaultCvId } : current);
+    setMessage(`Added ${file.name} to the draft CV list. Only the filename is saved; file upload is not connected yet.`);
   };
-  const removeCv = async (filename: string) => {
+  const removeCv = (filename: string) => {
     const cvFiles = profile.cvFiles.filter(cv => cv !== filename);
     const defaultCvId = profile.defaultCvId === filename ? cvFiles[0] || '' : profile.defaultCvId;
-    try {
-      await service.updateProfile({ cvFiles, defaultCvId });
-      setProfile(current => current ? { ...current, cvFiles, defaultCvId } : current);
-      setMessage(`${filename} removed from the demo CV library.`);
-    } catch {
-      setMessage('The CV could not be removed. Please try again.');
-    }
+    setProfile(current => current ? { ...current, cvFiles, defaultCvId } : current);
   };
   return <div className="main-wrap page-enter" style={{ paddingTop: 42, maxWidth: 830 }}><PageTitle kicker="Your foundation" title="A profile that grows with you" subtitle="Start with the essentials. Add detail as it becomes useful."/>
-    <form className="surface" onSubmit={save} style={{ padding: 'clamp(20px, 4vw, 32px)', display: 'grid', gap: 17 }}>
+    {message && <div role="status" data-testid="status-profile-save" style={{ fontSize: 12, marginBottom: 12, color: 'hsl(var(--primary))' }}>{message}</div>}
+    {!editing ? <section className="surface" data-testid="profile-readonly" style={{ padding: 'clamp(20px, 4vw, 32px)', display: 'grid', gap: 17 }}>
+      <div><div className="eyebrow">Professional headline</div><p data-testid="text-profile-headline" style={{ margin: '6px 0 0' }}>{profile.headline || 'Add a headline to introduce yourself.'}</p></div>
+      <div><div className="eyebrow">Location</div><p style={{ margin: '6px 0 0' }}>{profile.location || 'Not provided'}</p></div>
+      <div><div className="eyebrow">Skills</div><p style={{ margin: '6px 0 0' }}>{profile.skills.length ? profile.skills.join(', ') : 'Not provided'}</p></div>
+      <div><div className="eyebrow">Experience</div><p style={{ margin: '6px 0 0', whiteSpace: 'pre-wrap' }}>{profile.experience || 'Not provided'}</p></div>
+      <div><div className="eyebrow">Education</div><p style={{ margin: '6px 0 0' }}>{profile.education || 'Not provided'}</p></div>
+      <div><div className="eyebrow">What you’re looking for</div><p style={{ margin: '6px 0 0', whiteSpace: 'pre-wrap' }}>{profile.preferences || 'Not provided'}</p></div>
+      <div><div className="eyebrow">CV filename library</div><p style={{ margin: '6px 0 0' }}>{profile.cvFiles.length ? profile.cvFiles.map(cv => `${cv}${cv === profile.defaultCvId ? ' (default)' : ''}`).join(', ') : 'No CV filenames added'}</p><small style={{ color: 'hsl(var(--muted-foreground))' }}>Filenames only; files are not uploaded.</small></div>
+      <div style={{ display: 'flex', justifyContent: 'end' }}><button type="button" className="btn btn-primary" data-testid="button-edit-profile" onClick={() => { setMessage(''); setEditing(true); }}>Edit profile</button></div>
+    </section> : <form className="surface" onSubmit={save} style={{ padding: 'clamp(20px, 4vw, 32px)', display: 'grid', gap: 17 }}>
       <label className="form-label">Professional headline<input className="field" data-testid="input-profile-headline" value={profile.headline} onChange={e => setField('headline', e.target.value)} placeholder="e.g. Product-minded engineer"/></label>
       <label className="form-label">Location<input className="field" data-testid="input-profile-location" value={profile.location} onChange={e => setField('location', e.target.value)}/></label>
       <label className="form-label">Skills <span style={{ fontWeight: 400, color: 'hsl(var(--muted-foreground))' }}>Separate with commas; used for recommendations.</span><input className="field" data-testid="input-profile-skills" value={profile.skills.join(', ')} onChange={e => setField('skills', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}/></label>
       <label className="form-label">Experience<textarea className="field" rows={4} data-testid="input-profile-experience" value={profile.experience} onChange={e => setField('experience', e.target.value)} placeholder="A few lines about the work you've done"/></label>
       <label className="form-label">Education<input className="field" data-testid="input-profile-education" value={profile.education} onChange={e => setField('education', e.target.value)}/></label>
       <label className="form-label">What you're looking for<textarea className="field" rows={3} data-testid="input-profile-preferences" value={profile.preferences} onChange={e => setField('preferences', e.target.value)} placeholder="Team, work style, or role preferences"/></label>
-       <div><div className="form-label">CV filename library</div><div style={{ display: 'grid', gap: 8 }}>{profile.cvFiles.map(cv => <div key={cv} className="surface" style={{ padding: 11, display: 'flex', gap: 10, alignItems: 'center', fontSize: 12 }}><input type="radio" name="defaultcv" checked={profile.defaultCvId === cv} onChange={() => setField('defaultCvId', cv)} data-testid={`radio-default-cv-${cv}`}/><span style={{ flex: 1 }}>{cv}</span><span className="tag">{profile.defaultCvId === cv ? 'Default' : 'Choose default'}</span><button type="button" className="btn btn-quiet" aria-label={`Remove ${cv}`} data-testid={`button-remove-cv-${cv}`} onClick={() => removeCv(cv)}>Remove</button></div>)}</div><label className="btn btn-outline" style={{ width: 'fit-content', cursor: 'pointer', marginTop: 10 }}>Add a CV filename<input type="file" accept=".pdf,.doc,.docx" data-testid="input-add-cv" style={{ display: 'none' }} onChange={e => { const input = e.currentTarget; void addCv(input.files?.[0]).finally(() => { input.value = ''; }); }}/></label><div style={{ color: 'hsl(var(--muted-foreground))', fontSize: 11, marginTop: 8 }}>Metadata only: Steadwork saves the selected filename. The file is not uploaded, stored, or attached to applications.</div></div>
-      {message && <div role="status" data-testid="status-profile-save" style={{ fontSize: 12, color: 'hsl(var(--primary))' }}>{message}</div>}
-      <div style={{ display: 'flex', justifyContent: 'end' }}><button className="btn btn-primary" data-testid="button-save-profile"><Check size={15}/> Save profile</button></div>
-    </form>
+      <div><div className="form-label">CV filename library</div><div style={{ display: 'grid', gap: 8 }}>{profile.cvFiles.map(cv => <div key={cv} className="surface" style={{ padding: 11, display: 'flex', gap: 10, alignItems: 'center', fontSize: 12 }}><input type="radio" name="defaultcv" checked={profile.defaultCvId === cv} onChange={() => setField('defaultCvId', cv)} data-testid={`radio-default-cv-${cv}`}/><span style={{ flex: 1 }}>{cv}</span><span className="tag">{profile.defaultCvId === cv ? 'Default' : 'Choose default'}</span><button type="button" className="btn btn-quiet" aria-label={`Remove ${cv}`} data-testid={`button-remove-cv-${cv}`} onClick={() => removeCv(cv)}>Remove</button></div>)}</div><label className="btn btn-outline" style={{ width: 'fit-content', cursor: 'pointer', marginTop: 10 }}>Add a CV filename<input type="file" accept=".pdf,.doc,.docx" data-testid="input-add-cv" style={{ display: 'none' }} onChange={e => { const input = e.currentTarget; addCv(input.files?.[0]); input.value = ''; }}/></label><div style={{ color: 'hsl(var(--muted-foreground))', fontSize: 11, marginTop: 8 }}>Metadata only: Steadwork saves the selected filename. The file is not uploaded, stored, or attached to applications.</div></div>
+      <div style={{ display: 'flex', justifyContent: 'end', gap: 8 }}><button type="button" className="btn btn-outline" data-testid="button-cancel-profile" onClick={cancel} disabled={saving}>Cancel</button><button className="btn btn-primary" data-testid="button-save-profile" disabled={saving}>{saving ? 'Saving…' : <><Check size={15}/> Save profile</>}</button></div>
+    </form>}
   </div>;
 }
 function EmployerPage() {
@@ -349,7 +431,7 @@ function EmployerPage() {
   </div>;
 }
 function Metric({ label, value, icon }: { label: string; value: number; icon: ReactNode }) { return <div className="surface" style={{ padding: 17 }}><div style={{ display: 'flex', justifyContent: 'space-between', color: 'hsl(var(--muted-foreground))', fontSize: 11 }}>{label}<span style={{ color: 'hsl(var(--primary))' }}>{icon}</span></div><div className="font-display" data-testid={`metric-${label.toLowerCase().replace(' ', '-')}`} style={{ fontSize: 31, fontWeight: 800, marginTop: 9 }}>{value}</div></div>; }
-function StatusPill({ value }: { value: string }) { const color = ['Published','Shortlisted','Hired'].includes(value) ? 'green' : ['Draft','Under Review'].includes(value) ? 'orange' : ['Closed','Rejected','Withdrawn'].includes(value) ? 'red' : ''; return <span className={`status-pill ${color}`}>{value}</span>; }
+function StatusPill({ value, testId }: { value: string; testId?: string }) { const color = ['Published','Shortlisted','Hired','Applied'].includes(value) ? 'green' : ['Draft','Under Review'].includes(value) ? 'orange' : ['Closed','Rejected','Withdrawn'].includes(value) ? 'red' : ''; return <span className={`status-pill ${color}`} data-testid={testId}>{value}</span>; }
 function EmployerJobsPage() {
   const { data, loading, error, reload } = useLoad(() => service.listCompanyJobs());
   const [jobs, setJobs] = useState<Job[]>([]);

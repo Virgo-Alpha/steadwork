@@ -38,6 +38,14 @@ describe('MockJobBoardService', () => {
     const app = (await service.listApplicants('job-product'))[0];
     await expect(service.updateApplicationStatus(app.id, 'Shortlisted')).resolves.toMatchObject({ status: 'Shortlisted' });
   });
+  it('allows withdrawal only for eligible statuses and prevents reapplying after withdrawal', async () => {
+    const underReview = (await service.listApplications()).find(application => application.id === 'app-seed-1')!;
+    await expect(service.withdrawApplication(underReview.id)).resolves.toMatchObject({ status: 'Withdrawn' });
+    await expect(service.withdrawApplication(underReview.id)).rejects.toThrow('can no longer be withdrawn');
+    await expect(service.submitApplication({ jobId: underReview.jobId, candidateName: 'Maya Chen', candidateEmail: 'maya.chen@example.com', cvName: 'cv.pdf', coverLetter: '' })).rejects.toThrow('already applied');
+    const hired = await service.updateApplicationStatus('app-seed-2', 'Hired');
+    await expect(service.withdrawApplication(hired.id)).rejects.toThrow('can no longer be withdrawn');
+  });
   it('accepts guest applications without adding them to the candidate tracker', async () => {
     const input = { jobId: 'job-fullstack', candidateName: 'Guest Candidate', candidateEmail: 'guest@example.com', cvName: 'guest-resume.pdf', coverLetter: '', isGuest: true };
     const application = await service.submitApplication(input);

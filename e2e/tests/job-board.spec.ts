@@ -37,6 +37,26 @@ test('visitor, candidate, and recruiter complete an application flow in isolated
     await expect(visitor.getByTestId('text-job-title')).toHaveText('Platform Engineer');
     await expect(visitor.getByTestId('button-open-application')).toBeVisible();
     expect(await visitor.evaluate(() => sessionStorage.getItem('steadwork.access_token'))).toBeNull();
+    await visitor.getByTestId('button-open-application').click();
+    const visitorDialog = visitor.getByRole('dialog');
+    await expect(visitorDialog).toBeVisible();
+    const modalBounds = await visitorDialog.boundingBox();
+    const viewport = visitor.viewportSize()!;
+    expect(modalBounds).not.toBeNull();
+    expect(modalBounds!.width).toBeLessThanOrEqual(viewport.width);
+    expect(modalBounds!.x).toBeGreaterThanOrEqual(0);
+    expect(modalBounds!.x + modalBounds!.width).toBeLessThanOrEqual(viewport.width);
+    await expect(visitor.locator('body')).toHaveCSS('overflow', 'hidden');
+    await visitor.keyboard.press('Escape');
+    await expect(visitorDialog).toBeHidden();
+    await expect(visitor.getByTestId('button-open-application')).toBeFocused();
+
+    await visitor.goto(appPath('/'));
+    await expect(visitor.getByTestId('button-clear-filters')).toBeVisible();
+    await visitor.getByTestId('filter-remote').selectOption('Remote');
+    await visitor.getByTestId('filter-remote').selectOption('Hybrid');
+    await visitor.getByTestId('button-clear-filters').click();
+    await expect(visitor.getByTestId('filter-remote')).toHaveValue('');
 
     const candidate = await candidateContext.newPage();
     await login(
@@ -53,15 +73,29 @@ test('visitor, candidate, and recruiter complete an application flow in isolated
 
     await candidate.goto(appPath('/profile'));
     await expect(candidate.getByRole('heading', { name: 'A profile that grows with you' })).toBeVisible();
+    await expect(candidate.getByTestId('profile-readonly')).toBeVisible();
+    await expect(candidate.getByTestId('input-profile-headline')).toHaveCount(0);
+    await candidate.getByTestId('button-edit-profile').click();
+    await candidate.getByTestId('input-profile-headline').fill('Draft headline');
+    await candidate.getByTestId('button-cancel-profile').click();
+    await expect(candidate.getByTestId('profile-readonly')).toContainText('Add a headline to introduce yourself.');
+    await candidate.getByTestId('button-edit-profile').click();
+    await candidate.getByTestId('input-profile-headline').fill('Product-minded software engineer');
     await candidate.getByTestId('input-add-cv').setInputFiles({
       name: 'candidate-e2e.pdf',
       mimeType: 'application/pdf',
       buffer: Buffer.from('%PDF-1.4 E2E resume filename fixture'),
     });
     await expect(candidate.getByRole('status')).toContainText('Added candidate-e2e.pdf');
+    await candidate.getByTestId('button-save-profile').click();
+    await expect(candidate.getByTestId('profile-readonly')).toContainText('candidate-e2e.pdf');
+    await expect(candidate.getByTestId('profile-readonly')).toContainText('Product-minded software engineer');
 
     await candidate.goto(appPath('/jobs/job-platform'));
     await expect(candidate.getByTestId('button-open-application')).toBeVisible();
+    await expect(candidate.getByTestId('button-open-application')).toBeEnabled();
+    await candidate.getByTestId('button-detail-save').click();
+    await expect(candidate.getByTestId('button-detail-save')).toContainText('Saved');
     await candidate.getByTestId('button-open-application').click();
     const dialog = candidate.getByRole('dialog');
     await expect(dialog).toBeVisible();
@@ -76,12 +110,25 @@ test('visitor, candidate, and recruiter complete an application flow in isolated
     expect(application.status).toBe('Applied');
     await expect(candidate.getByTestId('status-application-feedback')).toContainText('Your application is in.');
 
+    await candidate.goto(appPath('/'));
+    await expect(candidate.getByTestId('application-status-job-platform')).toHaveText('Applied');
+    await candidate.goto(appPath('/saved'));
+    await expect(candidate.getByTestId('application-status-job-platform')).toHaveText('Applied');
+    await candidate.getByTestId('link-job-job-platform').click();
+    await expect(candidate.getByTestId('status-detail-application')).toHaveText('Applied');
+
     const applicationsResponse = waitForApi(candidate, 'candidate/applications/', 'GET');
     await candidate.goto(appPath('/applications'));
     expect((await applicationsResponse).status(), 'candidate applications API response').toBe(200);
     const candidateRow = candidate.getByTestId(`row-application-${application.id}`);
     await expect(candidateRow).toBeVisible();
     await expect(candidate.getByTestId(`status-application-${application.id}`)).toHaveText('Applied');
+    await candidate.getByTestId('filter-application-date').selectOption('7');
+    await expect(candidateRow).toBeVisible();
+    await candidate.getByTestId('filter-application-status').selectOption('Rejected');
+    await expect(candidate.getByText('No applications match')).toBeVisible();
+    await candidate.getByRole('button', { name: 'Clear filters' }).click();
+    await expect(candidateRow).toBeVisible();
 
     const recruiter = await recruiterContext.newPage();
     await login(
@@ -110,6 +157,19 @@ test('visitor, candidate, and recruiter complete an application flow in isolated
     await candidate.reload();
     expect((await refreshedApplications).status(), 'refreshed candidate applications response').toBe(200);
     await expect(candidate.getByTestId(`status-application-${application.id}`)).toHaveText('Under Review');
+    await candidate.goto(appPath(`/jobs/job-platform`));
+    await expect(candidate.getByTestId('status-detail-application')).toHaveText('Under Review');
+    await expect(candidate.getByTestId('button-open-application')).toHaveCount(0);
+    await candidate.getByTestId('button-detail-withdraw').click();
+    await candidate.getByTestId('button-cancel-detail-withdraw').click();
+    await expect(candidate.getByTestId('status-detail-application')).toHaveText('Under Review');
+    await candidate.getByTestId('button-detail-withdraw').click();
+    const withdrawalResponse = waitForApi(candidate, `applications/${application.id}/withdraw/`, 'POST');
+    await candidate.getByTestId('button-confirm-detail-withdraw').click();
+    expect((await withdrawalResponse).status(), 'candidate withdrawal response').toBe(200);
+    await expect(candidate.getByTestId('status-detail-application')).toHaveText('Withdrawn');
+    await expect(candidate.getByTestId('button-detail-withdraw')).toHaveCount(0);
+    await expect(candidate.getByTestId('button-open-application')).toHaveCount(0);
     expect(await visitor.evaluate(() => sessionStorage.getItem('steadwork.access_token'))).toBeNull();
     expect(await candidate.evaluate(() => sessionStorage.getItem('steadwork.access_token')))
       .not.toBe(await recruiter.evaluate(() => sessionStorage.getItem('steadwork.access_token')));
