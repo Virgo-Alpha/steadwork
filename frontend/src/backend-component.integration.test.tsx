@@ -32,10 +32,15 @@ const freePort = async () => new Promise<number>((resolve, reject) => {
 
 const waitFor = async (check: () => boolean | Promise<boolean>, timeout = 10_000) => {
   const started = Date.now();
-  while (!(await check())) {
+  while (true) {
+    let matched = false;
+    await act(async () => {
+      matched = await check();
+      if (!matched) await sleep(50);
+    });
+    if (matched) return;
     if (serviceExitError) throw serviceExitError;
     if (Date.now() - started > timeout) throw new Error('Timed out waiting for UI state.');
-    await sleep(50);
   }
 };
 
@@ -70,9 +75,11 @@ const input = (testId: string, value: string) => {
   const element = document.querySelector<HTMLInputElement | HTMLTextAreaElement>(`[data-testid="${testId}"]`)!;
   const prototype = element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
   const setter = Object.getOwnPropertyDescriptor(prototype, 'value')!.set!;
-  setter.call(element, value);
-  element.dispatchEvent(new Event('input', { bubbles: true }));
-  element.dispatchEvent(new Event('change', { bubbles: true }));
+  act(() => {
+    setter.call(element, value);
+    element.dispatchEvent(new Event('input', { bubbles: true }));
+    element.dispatchEvent(new Event('change', { bubbles: true }));
+  });
   return element;
 };
 const submit = async (form: HTMLFormElement) => {
@@ -152,17 +159,14 @@ beforeEach(async () => {
 });
 
 describe('frontend journeys over the live API and Vite proxy', () => {
-  it('submits account registration to the live API and opens the verification state', async () => {
+  it('submits account registration to the live API and signs in immediately', async () => {
     await click(document.querySelector('[data-testid="link-create-account"]')!);
     await waitFor(() => Boolean(document.querySelector('[data-testid="button-register"]')));
     input('input-account-name', 'New E2E Candidate');
     input('input-account-email', 'new-e2e-candidate@example.com');
     input('input-account-password', 'candidate-password-123');
     await submit(document.querySelector('form')!);
-    await waitFor(() => document.body.textContent?.includes('Check your inbox.') ?? false);
-    // The heading renders before the async /auth/me/ request completes.
-    // Wait for the verification page to hydrate its account-specific copy.
-    await waitFor(() => document.body.textContent?.includes('new-e2e-candidate@example.com') ?? false);
+    await waitFor(() => document.querySelector('[data-testid="label-current-user"]')?.textContent === 'New E2E Candidate');
     expect(window.sessionStorage.getItem(ACCESS_TOKEN_KEY)).toBeTruthy();
     expect(document.querySelector('[data-testid="status-auth-error"]')).toBeNull();
   });
@@ -209,7 +213,7 @@ describe('frontend journeys over the live API and Vite proxy', () => {
     input('input-applicant-email', 'candidate@example.com');
     input('input-cover-letter', 'A thoughtful application.');
     const cv = document.querySelector<HTMLSelectElement>('[data-testid="select-cv"]');
-    if (cv) { cv.value = cv.options[0]?.value || ''; cv.dispatchEvent(new Event('change', { bubbles: true })); }
+    if (cv) act(() => { cv.value = cv.options[0]?.value || ''; cv.dispatchEvent(new Event('change', { bubbles: true })); });
     await submit(document.querySelector('[role="dialog"] form')!);
     await waitFor(() => document.body.textContent?.includes('Your application is in') ?? false);
     await click(document.querySelector('[data-testid="nav-applications"]')!);

@@ -1,8 +1,5 @@
 from datetime import datetime, timezone as dt_timezone
-from django.conf import settings
 from django.contrib.auth.hashers import make_password
-from django.core import signing
-from django.core.mail import send_mail
 from django.core.validators import validate_email
 from django.core.exceptions import ValidationError
 import math
@@ -110,49 +107,20 @@ def login(request):
 
 
 @api_view(["POST"])
+def email_account_action_disabled(request):
+    return Response(
+        {"detail": "Email verification and password reset are currently disabled."},
+        status=status.HTTP_410_GONE,
+    )
+
+
+@api_view(["POST"])
 def logout(request):
     user = current_user(request)
     if user is None:
         return Response({"detail": "Authentication credentials were not provided."}, status=401)
     user.auth_version += 1
     return Response(status=204)
-
-
-def _email_action_token(user, purpose):
-    return signing.dumps({"uid": user.id, "purpose": purpose, "version": user.auth_version}, salt="steadwork.email-action")
-
-
-def _read_email_action_token(token, purpose):
-    try:
-        payload = signing.loads(token, salt="steadwork.email-action",
-                                max_age=getattr(settings, "EMAIL_TOKEN_LIFETIME_SECONDS", 86400))
-    except (signing.BadSignature, TypeError):
-        return None
-    if not isinstance(payload, dict) or payload.get("purpose") != purpose:
-        return None
-    user = next((item for item in get_store().users if item.id == payload.get("uid")), None)
-    if user is None or (purpose == "reset" and payload.get("version") != user.auth_version):
-        return None
-    if purpose == "verify" and user.email_verified:
-        return None
-    return user
-
-
-def _send_action_email(request, user, purpose):
-    if getattr(settings, "EMAIL_BACKEND", "").endswith("dummy.EmailBackend"):
-        raise RuntimeError("Email delivery is not configured.")
-    token = _email_action_token(user, purpose)
-    route = "verify-email" if purpose == "verify" else "forgot-password"
-    url = request.build_absolute_uri(f"/{route}/?token={token}")
-    if purpose == "verify":
-        subject, message = "Verify your Steadwork email", f"Confirm your email address: {url}"
-    else:
-        subject, message = "Reset your Steadwork password", f"Choose a new password: {url}"
-    sender = getattr(settings, "DEFAULT_FROM_EMAIL", "no-reply@steadwork.local")
-    sent = send_mail(subject, message, sender, [user.email], fail_silently=False)
-    if sent != 1:
-        raise RuntimeError("Email backend did not accept the message.")
-    return sent
 
 
 @api_view(["POST"])
@@ -183,7 +151,7 @@ def register(request):
     store = get_store()
     if any(item.email.lower() == email for item in store.users):
         return Response({"detail": "An account with this email already exists."}, status=409)
-    user = User(uuid4().hex, email, role, make_password(password), name.strip(), False)
+    user = User(uuid4().hex, email, role, make_password(password), name.strip(), True)
     store.users.append(user)
     company = None
     if role == "candidate":
@@ -192,65 +160,7 @@ def register(request):
         company = Company(uuid4().hex, company_name.strip())
         store.companies.append(company)
         store.memberships.append(Membership(user.id, company.id, "recruiter"))
-    try:
-        _send_action_email(request, user, "verify")
-    except Exception:
-        store.users.remove(user)
-        store.profiles.pop(user.id, None)
-        if company is not None:
-            store.companies.remove(company)
-            store.memberships[:] = [membership for membership in store.memberships if membership.user_id != user.id]
-        return Response({"detail": "We could not send the verification email, so no account was created. Please try again later."}, status=503)
     return Response({"access_token": issue_token(user), "token_type": "Bearer", "user": user.to_dict()}, status=201)
-
-
-@api_view(["POST"])
-def verify_email(request):
-    if not isinstance(request.data, dict):
-        return _bad("Request body must be a JSON object.")
-    token = request.data.get("token")
-    if not isinstance(token, str) or not token:
-        return _bad("A verification token is required.")
-    user = _read_email_action_token(token, "verify")
-    if user is None:
-        return Response({"detail": "This verification link is invalid or expired."}, status=400)
-    user.email_verified = True
-    return Response(user.to_dict())
-
-
-@api_view(["POST"])
-def password_reset(request):
-    if not isinstance(request.data, dict):
-        return _bad("Request body must be a JSON object.")
-    token = request.data.get("token")
-    if token is not None:
-        password = request.data.get("password")
-        if not isinstance(token, str) or not token or not isinstance(password, str) or not 8 <= len(password) <= 256:
-            return _bad("A valid reset token and a password of 8 to 256 characters are required.")
-        user = _read_email_action_token(token, "reset")
-        if user is None:
-            return Response({"detail": "This password reset link is invalid or expired."}, status=400)
-        user.password_hash = make_password(password)
-        user.auth_version += 1
-        return Response(status=204)
-    email = request.data.get("email")
-    if not isinstance(email, str):
-        return _bad("Enter a valid email address.")
-    email = email.strip().lower()
-    try:
-        validate_email(email)
-    except ValidationError:
-        return _bad("Enter a valid email address.")
-    if getattr(settings, "EMAIL_BACKEND", "").endswith("dummy.EmailBackend"):
-        return Response({"detail": "Password reset email is temporarily unavailable. Please try again later."}, status=503)
-    user = next((item for item in get_store().users if item.email.lower() == email), None)
-    if user:
-        try:
-            _send_action_email(request, user, "reset")
-        except Exception:
-            # Do not disclose whether the account exists when mail delivery fails.
-            pass
-    return Response({"detail": "If an account exists for that email, reset instructions have been sent."}, status=202)
 
 
 @api_view(["GET"])

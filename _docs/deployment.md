@@ -44,7 +44,7 @@ The repository pins `render-oss/render` to `~> 1.9.1`. That provider sends a `ma
 
 `.github/scripts/sync_render_env.py` uses Render's [per-variable API endpoint](https://api-docs.render.com/reference/update-env-var) to update only `DATABASE_URL`, `STEADWORK_STORE`, `DJANGO_DEBUG`, and `DJANGO_ALLOWED_HOSTS`. This leaves the generated `DJANGO_SECRET_KEY` and any other service variables untouched. It never prints variable values, and the workflow masks `DATABASE_URL` before passing it to later steps. The Render CLI is pinned to `2.34.0` and deploys the exact image digest with [`deploys create`](https://render.com/docs/cli-reference); update that version deliberately when changing the CLI.
 
-To enable account verification and password reset email in a hosted environment, configure `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `EMAIL_USE_TLS`, and `DEFAULT_FROM_EMAIL` on the Render web service. Keep credentials in Render's environment settings. The CI workflow intentionally does not transfer SMTP credentials from GitHub into Render. Without these settings, registration fails cleanly without creating a user, and reset requests report that mail delivery is unavailable.
+Account verification email and password reset are disabled. Registration creates a signed-in account immediately, and the legacy verification/reset API paths return `410 Gone`. Users who forget a password need operator assistance until account recovery is implemented. No SMTP environment variables are required.
 
 Because dev and prod share the one free database, both deployment jobs use the same GitHub Actions concurrency group. This serializes migrations and deployment steps across environments.
 

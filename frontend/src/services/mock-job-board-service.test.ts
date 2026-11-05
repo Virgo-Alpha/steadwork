@@ -24,15 +24,13 @@ describe('MockJobBoardService', () => {
     const second = new MockJobBoardService(store);
     await expect(second.getProfile()).resolves.toMatchObject({ cvFiles: ['Maya-Chen-Resume.pdf', 'Platform-Resume.pdf'], defaultCvId: 'Platform-Resume.pdf' });
   });
-  it('supports mock registration and verification without storing a password', async () => {
+  it('supports mock registration without email verification or storing a password', async () => {
     const data = new Map<string, string>();
     const store = { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => { data.set(k, v); } };
     const service = new MockJobBoardService(store);
     const user = await service.registerAccount({ name: 'Taylor Reed', email: 'taylor@example.com', password: 'demo-password-123', role: 'company' });
-    expect(user).toMatchObject({ name: 'Taylor Reed', role: 'company', emailVerified: false });
+    expect(user).toMatchObject({ name: 'Taylor Reed', role: 'company', emailVerified: true });
     expect([...data.values()].join(' ')).not.toContain('demo-password-123');
-    await expect(service.verifyEmail()).resolves.toMatchObject({ emailVerified: true });
-    await expect(service.requestPasswordReset('taylor@example.com')).resolves.toBeUndefined();
   });
   it('prevents duplicate applications and supports status updates', async () => {
     await expect(service.submitApplication({ jobId: 'job-platform', candidateName: 'Maya Chen', candidateEmail: 'maya.chen@example.com', cvName: 'cv.pdf', coverLetter: '' })).resolves.toMatchObject({ status: 'Applied' });

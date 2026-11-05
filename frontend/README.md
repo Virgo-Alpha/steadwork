@@ -29,4 +29,4 @@ npm run build
 - `src/services/index.ts` selects the implementation.
 - `backend-plan.md` records the proposed API contract and the backend-stack choice to resolve.
 
-The mock does not store passwords, send verification or reset emails, or upload CV contents. Vite proxies `/api` to `http://localhost:8000` by default (override with `API_PROXY_TARGET`). Set `VITE_DATA_MODE=mock` to use mock data; API failures never fall back to mock data. In API mode, registration, verification, password reset, and candidate recommendations use backend endpoints. The CV picker stores filename metadata only; it never uploads or attaches file contents.
+The mock does not store passwords, send email, or upload CV contents. Vite proxies `/api` to `http://localhost:8000` by default (override with `API_PROXY_TARGET`). Set `VITE_DATA_MODE=mock` to use mock data; API failures never fall back to mock data. In API mode, registration and candidate recommendations use backend endpoints. Email verification and password reset are disabled. The CV picker stores filename metadata only; it never uploads or attaches file contents.

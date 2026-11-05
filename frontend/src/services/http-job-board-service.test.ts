@@ -66,26 +66,13 @@ describe('HttpJobBoardService', () => {
   });
 
   it('registers through the API and stores the returned session', async () => {
-    vi.mocked(fetch).mockResolvedValue(response({ access_token: 'registration-token', token_type: 'Bearer', user: { id: 'u1', name: 'A', email: 'a@example.com', role: 'candidate', emailVerified: false } }, 201));
-    await expect(service.registerAccount({ name: 'A', email: 'a@example.com', password: 'long-password', role: 'candidate' })).resolves.toMatchObject({ name: 'A', emailVerified: false });
+    vi.mocked(fetch).mockResolvedValue(response({ access_token: 'registration-token', token_type: 'Bearer', user: { id: 'u1', name: 'A', email: 'a@example.com', role: 'candidate', emailVerified: true } }, 201));
+    await expect(service.registerAccount({ name: 'A', email: 'a@example.com', password: 'long-password', role: 'candidate' })).resolves.toMatchObject({ name: 'A', emailVerified: true });
     expect(vi.mocked(fetch).mock.calls[0][0]).toBe('/api/auth/register/');
     expect(JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string)).toEqual({ name: 'A', email: 'a@example.com', password: 'long-password', role: 'candidate' });
     expect(new Headers(vi.mocked(fetch).mock.calls[0][1]?.headers).get('Content-Type')).toBe('application/json');
     expect(window.sessionStorage.getItem('steadwork.access_token')).toBe('registration-token');
     expect(window.sessionStorage.getItem('steadwork.user')).toContain('a@example.com');
-  });
-
-  it('calls verification and password reset endpoints with the correct payloads', async () => {
-    vi.mocked(fetch)
-      .mockResolvedValueOnce(response({ id: 'u1', name: 'A', email: 'a@example.com', role: 'candidate', emailVerified: true }))
-      .mockResolvedValueOnce(response({ detail: 'If an account exists, a message was sent.' }, 202))
-      .mockResolvedValueOnce(response(undefined, 204));
-    await expect(service.verifyEmail('verify-token')).resolves.toMatchObject({ emailVerified: true });
-    await service.requestPasswordReset('a@example.com');
-    await service.completePasswordReset('reset-token', 'a-new-password');
-    expect(JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string)).toEqual({ token: 'verify-token' });
-    expect(JSON.parse(vi.mocked(fetch).mock.calls[1][1]?.body as string)).toEqual({ email: 'a@example.com' });
-    expect(JSON.parse(vi.mocked(fetch).mock.calls[2][1]?.body as string)).toEqual({ token: 'reset-token', password: 'a-new-password' });
   });
 
   it('clears the local session after requesting server-side logout', async () => {

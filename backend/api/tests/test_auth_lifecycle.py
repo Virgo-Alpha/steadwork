@@ -1,9 +1,4 @@
-import re
-from urllib.parse import urlparse, parse_qs
-
 import pytest
-from django.core import mail
-from django.test import override_settings
 from django.contrib.auth.hashers import check_password
 from rest_framework.test import APIClient
 
@@ -17,40 +12,22 @@ def clean_store():
     reset_store()
 
 
-@pytest.fixture(autouse=True)
-def email_backend():
-    with override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend"):
-        mail.outbox = []
-        yield
-
-
 def registration(**overrides):
     return {"name": "Taylor Reed", "email": "Taylor@example.com", "password": "long-password-123", "role": "candidate", **overrides}
 
 
-def token_from_mail(message):
-    match = re.search(r"https?://\S+", message.body)
-    assert match
-    return parse_qs(urlparse(match.group(0)).query)["token"][0]
-
-
-def test_candidate_registration_hashes_password_sends_verification_and_can_verify():
+def test_candidate_registration_hashes_password_and_returns_authenticated_verified_user():
     client = APIClient()
     response = client.post("/api/auth/register/", registration(), format="json")
     assert response.status_code == 201
     body = response.json()
-    assert body["user"] == {"id": body["user"]["id"], "name": "Taylor Reed", "email": "taylor@example.com", "role": "candidate", "emailVerified": False}
+    assert body["user"] == {"id": body["user"]["id"], "name": "Taylor Reed", "email": "taylor@example.com", "role": "candidate", "emailVerified": True}
     assert body["token_type"] == "Bearer"
     assert "long-password-123" not in str(body)
     user = next(item for item in get_store().users if item.email == "taylor@example.com")
     assert check_password("long-password-123", user.password_hash)
     assert get_store().profiles[user.id]["userId"] == user.id
-    assert len(mail.outbox) == 1
-
-    verified = client.post("/api/auth/verify-email/", {"token": token_from_mail(mail.outbox[0])}, format="json")
-    assert verified.status_code == 200
-    assert verified.json()["emailVerified"] is True
-    assert client.post("/api/auth/verify-email/", {"token": token_from_mail(mail.outbox[0])}, format="json").status_code == 400
+    assert client.get("/api/auth/me/", HTTP_AUTHORIZATION=f"Bearer {body['access_token']}").status_code == 200
 
 
 @pytest.mark.parametrize("payload", [
@@ -68,7 +45,7 @@ def test_registration_rejects_invalid_fields(payload):
 
 def test_authentication_endpoints_reject_non_object_payloads_cleanly():
     client = APIClient()
-    for path in ("/api/auth/login/", "/api/auth/register/", "/api/auth/verify-email/", "/api/auth/password-reset/"):
+    for path in ("/api/auth/login/", "/api/auth/register/"):
         response = client.post(path, ["unexpected", "array"], format="json")
         assert response.status_code == 400
         assert response.json()["detail"] == "Request body must be a JSON object."
@@ -91,45 +68,12 @@ def test_company_registration_creates_company_membership_and_profile_access():
     assert any(company.name == "Fieldnote" for company in get_store().companies)
 
 
-def test_email_delivery_failure_does_not_leave_in_memory_account():
-    with pytest.MonkeyPatch.context() as patch:
-        patch.setattr("api.routers.send_mail", lambda *args, **kwargs: 0)
-        response = APIClient().post("/api/auth/register/", registration(), format="json")
-    assert response.status_code == 503
-    assert not any(user.email == "taylor@example.com" for user in get_store().users)
-
-
-def test_password_reset_is_non_enumerating_and_invalidates_old_password_and_token():
+def test_verification_and_password_reset_endpoints_are_disabled():
     client = APIClient()
-    assert client.post("/api/auth/password-reset/", {"email": "missing@example.com"}, format="json").json() == client.post("/api/auth/password-reset/", {"email": "candidate@example.com"}, format="json").json()
-    assert len(mail.outbox) == 1
-    old_login = client.post("/api/auth/login/", {"email": "candidate@example.com", "password": "candidate-password"}, format="json")
-    assert old_login.status_code == 200
-    reset_token = token_from_mail(mail.outbox[0])
-    assert client.post("/api/auth/password-reset/", {"token": reset_token, "password": "new-password-456"}, format="json").status_code == 204
-    assert client.post("/api/auth/login/", {"email": "candidate@example.com", "password": "candidate-password"}, format="json").status_code == 401
-    assert client.post("/api/auth/login/", {"email": "candidate@example.com", "password": "new-password-456"}, format="json").status_code == 200
-    assert client.post("/api/auth/password-reset/", {"token": reset_token, "password": "another-password"}, format="json").status_code == 400
-    assert client.get("/api/auth/me/", HTTP_AUTHORIZATION=f"Bearer {old_login.json()['access_token']}").status_code == 401
-
-
-def test_action_tokens_reject_wrong_purpose_and_expired_tokens():
-    client = APIClient()
-    client.post("/api/auth/register/", registration(), format="json")
-    client.post("/api/auth/password-reset/", {"email": "taylor@example.com"}, format="json")
-    reset_token = token_from_mail(mail.outbox[1])
-    assert client.post("/api/auth/verify-email/", {"token": reset_token}, format="json").status_code == 400
-    verify_token = token_from_mail(mail.outbox[0])
-    with override_settings(EMAIL_TOKEN_LIFETIME_SECONDS=-1):
-        assert client.post("/api/auth/verify-email/", {"token": verify_token}, format="json").status_code == 400
-
-
-def test_verification_link_remains_valid_after_logout():
-    client = APIClient()
-    registered = client.post("/api/auth/register/", registration(), format="json")
-    verify_token = token_from_mail(mail.outbox[0])
-    assert client.post("/api/auth/logout/", HTTP_AUTHORIZATION=f"Bearer {registered.json()['access_token']}").status_code == 204
-    assert client.post("/api/auth/verify-email/", {"token": verify_token}, format="json").status_code == 200
+    for path in ("/api/auth/verify-email/", "/api/auth/password-reset/"):
+        response = client.post(path, {"anything": "ignored"}, format="json")
+        assert response.status_code == 410
+        assert response.json()["detail"] == "Email verification and password reset are currently disabled."
 
 
 def test_recommendations_require_candidate_and_rank_matching_skills():

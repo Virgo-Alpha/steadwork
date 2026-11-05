@@ -8,7 +8,7 @@ The frontend currently uses `MockJobBoardService`; `VITE_DATA_MODE=api` selects 
 - `GET/PATCH /candidate/profile/`, `GET /candidate/applications/`, `POST /applications/`, `POST /applications/guest/`, `POST /applications/{id}/withdraw/`
 - `GET /employer/dashboard/`, `GET/POST /employer/jobs/`, `GET/PATCH /employer/jobs/{id}/`, `POST /employer/jobs/{id}/status/`
 - `GET /employer/jobs/{id}/applications/`, `POST /employer/applications/{id}/status/`
-- `GET /notifications/`, `POST /notifications/{id}/read/`; `GET /auth/me/`, `POST /auth/register/`, `POST /auth/login/`, `POST /auth/verify-email/`, `POST /auth/password-reset/`, and demo-only `POST /auth/demo-role/`
+- `GET /notifications/`, `POST /notifications/{id}/read/`; `GET /auth/me/`, `POST /auth/register/`, and `POST /auth/login/`. Email verification and password reset are disabled for now; their legacy API paths return `410 Gone`.
 
 Assumptions: session-cookie authentication with CSRF protection for unsafe methods; public job/company reads and guest internal applications are allowed; candidate-only profile/save/withdraw permissions; company membership controls job and applicant access. CV uploads should use a separate multipart upload endpoint returning a stored file identifier; this initial mock uses named sample files. Company team invitations, admin moderation, verification, email delivery, and production auth are future backend work. Server-side validation, duplicate protection, lifecycle/deadline enforcement, and audit logging remain authoritative.
 

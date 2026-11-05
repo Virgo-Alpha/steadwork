@@ -46,7 +46,7 @@ Product discovery is in progress, with decisions 1–25 confirmed. The API below
 
 ## 4. Authentication
 
-- Support registration, login, email verification and password reset.
+- Support registration and login. Email verification and email-based password reset are disabled for now.
 - Enforce role-based permissions; social login is outside MVP scope.
 - The proposed API assumes session-cookie authentication with CSRF protection for unsafe methods.
 - The demo role-switching endpoint is for demo use only.
@@ -148,16 +148,14 @@ The proposed base path is `/api`; resources use JSON, with a separate multipart 
 | Authentication | `GET /auth/me/` | Read the current authenticated user. |
 | Authentication | `POST /auth/register/` | Register an account. |
 | Authentication | `POST /auth/login/` | Log in. |
-| Authentication | `POST /auth/verify-email/` | Verify an email address. |
-| Authentication | `POST /auth/password-reset/` | Support password reset. |
 | Demo only | `POST /auth/demo-role/` | Switch demo roles. |
 
 ## 13. Backend completion and unresolved details
 
-- Registration, login, email verification, password reset, candidate recommendations, and current candidate/employer endpoints are implemented. Verification and reset mail use the configured Django email backend; hosted environments must configure SMTP. Company team invitations and admin moderation remain future backend work.
+- Registration, login, candidate recommendations, and current candidate/employer endpoints are implemented. Registration does not require email verification. Email verification and password reset are disabled; their legacy API paths return `410 Gone`. Company team invitations and admin moderation remain future backend work.
 - Company registration now has an API contract and creates the company plus its initial recruiter membership. Company profile editing, team management, file-backed CV uploads, moderation, and external-click routes remain deferred; Section 14 records proposed contracts, with decisions #26–#28 still pending where noted.
 - Request/response schemas, detailed validation rules and error formats are not supplied by the source documents.
-- Configure SMTP for hosted email and decide whether email delivery needs an asynchronous worker at production scale.
+- Decide whether and how to restore email verification and account recovery.
 - Enforce validation, duplicate protection, permissions, lifecycle/deadline rules and audit logging on the server.
 
 ## 14. Deferred persistence and API contracts

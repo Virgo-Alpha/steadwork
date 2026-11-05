@@ -115,17 +115,6 @@ export class HttpJobBoardService implements JobBoardService {
     storage()?.setItem(USER_KEY, JSON.stringify(user));
     return user;
   }
-  async verifyEmail(token?: string) {
-    const user = await request<User>('/auth/verify-email/', json('POST', { token }), { shape: one<User>('user', ['id', 'email', 'role']) });
-    storage()?.setItem(USER_KEY, JSON.stringify(user));
-    return user;
-  }
-  async requestPasswordReset(email: string) {
-    await request('/auth/password-reset/', json('POST', { email }));
-  }
-  async completePasswordReset(token: string, password: string) {
-    await request('/auth/password-reset/', json('POST', { token, password }));
-  }
   async logout() { try { await protectedRequest<void>('/auth/logout/', json('POST')); } finally { clearSession(); } }
   switchRole(_role: 'candidate' | 'company') { return unsupported('Demo role switching'); }
   getProfile() { return protectedRequest<CandidateProfile>('/candidate/profile/', {}, one<CandidateProfile>('profile', ['userId'])); }

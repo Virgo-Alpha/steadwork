@@ -6,13 +6,25 @@ For the deployed sites, see below:
 - Development: https://steadwork-development.onrender.com/
 - Production: https://steadwork-production.onrender.com/
 
+## Seeded demo accounts
+
+| Name | Email | Password |
+|---|---|---|
+| Demo Candidate | `candidate@example.com` | `candidate-password` |
+| Demo Recruiter | `recruiter@example.com` | `recruiter-password` |
+| Demo Admin | `admin@example.com` | `admin-password` |
+
+Use these accounts only for local development. The Render development and
+production services currently share a database, and an empty database is seeded
+with these same accounts. Do not use the demo credentials in production.
+
 ## Project specifications
 
 The implemented API contract consumed by the frontend is documented in [`openapi.yaml`](openapi.yaml). Product goals and the proposed broader product scope are in [product specifications](_docs/specs.md) and [project scope and decisions](_docs/job_board_project_scope.md). Backend architecture and unresolved decisions are in the [backend plan](_docs/backend-plan.md).
 
 Work is tracked as GitHub issues in the [public issue tracker](https://github.com/Virgo-Alpha/steadwork/issues). The [delivery process](_docs/process.md) describes grooming, dependencies, worktrees, review and status transitions. 
 
-Current API behavior includes public job and company reads; bearer-token login; candidate profile, saved jobs and application flows; employer job and applicant workflows; and in-app notifications. Guest internal applications are accepted. Authentication uses bearer tokens. Registration, email verification, password reset, recommendations, CV binary upload/storage, company profile/team administration, platform administrator dashboards and moderation, external-apply tracking and email delivery are not implemented in the API. The mock may demonstrate UI behavior beyond the backend; its sample CV names are not uploaded files. No automatic fallback from API failures to mock data occurs.
+Current API behavior includes public job and company reads; bearer-token login; candidate profile, saved jobs and application flows; employer job and applicant workflows; and in-app notifications. Guest internal applications are accepted. Registration immediately signs users in without sending email. Email verification and password reset are disabled; users who forget a password need operator assistance. Recommendations, CV binary upload/storage, company profile/team administration, platform administrator dashboards and moderation, external-apply tracking and email delivery are not implemented in the API. The mock may demonstrate UI behavior beyond the backend; its sample CV names are not uploaded files. No automatic fallback from API failures to mock data occurs.
 
 ## Local setup and commands
 

@@ -76,7 +76,7 @@ export class MockJobBoardService implements JobBoardService {
   async getCurrentUser() { return structuredClone(this.state.user); }
   async registerAccount(input: AccountRegistration) {
     if (!input.name.trim() || !input.email.trim() || input.password.length < 8) throw new Error('Enter your name, a valid email, and a password with at least 8 characters.');
-    this.state.user = { id: `user-${Date.now()}`, name: input.name.trim(), email: input.email.trim().toLowerCase(), role: input.role, emailVerified: false };
+    this.state.user = { id: `user-${Date.now()}`, name: input.name.trim(), email: input.email.trim().toLowerCase(), role: input.role, emailVerified: true };
     if (input.role === 'candidate') {
       this.state.profile = { userId: this.state.user.id, headline: '', location: '', skills: [], experience: '', education: '', preferences: '', cvFiles: [], defaultCvId: '' };
     }
@@ -93,17 +93,6 @@ export class MockJobBoardService implements JobBoardService {
       this.persist();
     }
     return structuredClone(this.state.user);
-  }
-  async verifyEmail(_token?: string) {
-    this.state.user.emailVerified = true;
-    this.persist();
-    return structuredClone(this.state.user);
-  }
-  async requestPasswordReset(email: string) {
-    if (!email.trim()) throw new Error('Enter an email address.');
-  }
-  async completePasswordReset(_token: string, password: string) {
-    if (password.length < 8) throw new Error('Password must contain at least 8 characters.');
   }
   async logout() {}
   async switchRole(role: 'candidate' | 'company') { this.state.user = role === 'company' ? { id: 'user-company', name: 'Jordan Lee', email: 'jordan@northstarlabs.dev', role: 'company' } : defaultState().user; this.persist(); return structuredClone(this.state.user); }

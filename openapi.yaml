@@ -5,8 +5,9 @@ info:
   description: |
     Contract for the HTTP endpoints called by `frontend/src/services/http-job-board-service.ts`.
     Paths are relative to `/api`. Authentication uses the bearer access token returned
-    by `POST /auth/login/`. Registration, verification, password reset, and candidate
-    recommendations are supported. Role switching and demo reset remain browser-mock-only.
+    by `POST /auth/login/`. Registration and candidate recommendations are supported.
+    Email verification and password reset are currently disabled. Role switching and
+    demo reset remain browser-mock-only.
 servers:
   - url: /api
     description: Same-origin API base used by the frontend
@@ -145,7 +146,7 @@ paths:
     post:
       tags: [Authentication]
       operationId: registerAccount
-      summary: Create a candidate or company account and send a verification email
+      summary: Create a candidate or company account without email verification
       security: []
       requestBody:
         required: true
@@ -164,42 +165,22 @@ paths:
         '201': { description: Account created; response contains bearer token and user. }
         '400': { $ref: '#/components/responses/BadRequest' }
         '409': { $ref: '#/components/responses/Conflict' }
-        '503': { description: Email delivery is unavailable; account creation is rolled back. }
   /auth/verify-email/:
     post:
       tags: [Authentication]
-      operationId: verifyEmail
-      summary: Verify an email address with a one-time token
+      operationId: verifyEmailDisabled
+      summary: Disabled email verification endpoint
       security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { type: object, required: [token], properties: { token: { type: string } } }
       responses:
-        '200': { description: Verified user. }
-        '400': { $ref: '#/components/responses/BadRequest' }
+        '410': { description: Email verification is currently disabled. }
   /auth/password-reset/:
     post:
       tags: [Authentication]
-      operationId: passwordReset
-      summary: Request a reset email or consume a one-time reset token
+      operationId: passwordResetDisabled
+      summary: Disabled password reset endpoint
       security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                email: { type: string, format: email }
-                token: { type: string }
-                password: { type: string, minLength: 8, maxLength: 256 }
       responses:
-        '202': { description: Non-enumerating reset request response. }
-        '204': { description: Password updated. }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '503': { description: Email delivery is unavailable. }
+        '410': { description: Password reset is currently disabled. }
   /auth/me/:
     get:
       tags: [Authentication]

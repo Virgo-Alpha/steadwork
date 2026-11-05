@@ -4,7 +4,6 @@ from pathlib import Path
 
 import pytest
 from django.test import override_settings
-from django.core import mail
 from django.utils import timezone
 from rest_framework.test import APIClient
 from sqlalchemy.engine import make_url
@@ -87,31 +86,19 @@ def test_sqlite_http_state_survives_new_request_sessions_and_is_isolated(sqlite_
     assert candidate.get("/api/saved-jobs/").json()[0]["id"] == "job-platform"
 
 
-def test_registration_and_password_reset_persist_across_sqlite_request_sessions(sqlite_api):
+def test_registration_without_email_and_disabled_recovery_persist_across_sqlite_request_sessions(sqlite_api):
     client, _database_path, _database_url = sqlite_api
-    with override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend"):
-        mail.outbox = []
-        created = client.post("/api/auth/register/", {
-            "name": "Persistent Candidate", "email": "persistent@example.com",
-            "password": "persistent-password", "role": "candidate",
-        }, format="json")
-        assert created.status_code == 201
-        assert client.post("/api/auth/login/", {
-            "email": "persistent@example.com", "password": "persistent-password",
-        }, format="json").status_code == 200
-        token = mail.outbox[0].body.split("token=")[1].strip()
-        verified = client.post("/api/auth/verify-email/", {"token": token}, format="json")
-        assert verified.status_code == 200
-        assert verified.json()["emailVerified"] is True
-
-        assert client.post("/api/auth/password-reset/", {"email": "persistent@example.com"}, format="json").status_code == 202
-        reset_token = mail.outbox[1].body.split("token=")[1].strip()
-        assert client.post("/api/auth/password-reset/", {
-            "token": reset_token, "password": "changed-password",
-        }, format="json").status_code == 204
-        assert client.post("/api/auth/login/", {
-            "email": "persistent@example.com", "password": "changed-password",
-        }, format="json").status_code == 200
+    created = client.post("/api/auth/register/", {
+        "name": "Persistent Candidate", "email": "persistent@example.com",
+        "password": "persistent-password", "role": "candidate",
+    }, format="json")
+    assert created.status_code == 201
+    assert created.json()["user"]["emailVerified"] is True
+    assert client.post("/api/auth/login/", {
+        "email": "persistent@example.com", "password": "persistent-password",
+    }, format="json").status_code == 200
+    for path in ("/api/auth/verify-email/", "/api/auth/password-reset/"):
+        assert client.post(path, {}, format="json").status_code == 410
 
 
 def test_sqlite_http_fixtures_start_clean_and_duplicate_applications_do_not_write_twice(sqlite_api):

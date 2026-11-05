@@ -25,7 +25,7 @@ Develop a job board where companies can post tech job openings and users can sea
 | 4 | Application management | B — Status tracking | Recruiters update statuses (Applied, Under Review, Shortlisted, Rejected, Hired); registered candidates see their status. External applications are tracked separately. |
 | 5 | Job posting lifecycle | B — Lifecycle management | Draft, published, closed and expired jobs; deadlines and reopening. |
 | 6 | Job discovery | B — Advanced search | Keyword search; filter by location, job type, remote work, salary, experience level, skills, company and posting date; sorting. |
-| 7 | Authentication | A — Email/password | Registration, login, email verification, password reset, and role-based permissions. No social login in MVP. |
+| 7 | Authentication | A — Email/password | Registration and login with role-based permissions. Email verification and email-based password reset are disabled for now; no social login in MVP. |
 | 8 | Company permissions | B — Admin/recruiter | Company admins manage profiles, invitations and all jobs; recruiters create jobs and review applications. |
 | 9 | Notifications | C — Email + in-app | Job seekers receive application updates; recruiters receive new-application alerts; in-app notification center. |
 | 10 | Candidate dashboard | B — Organized dashboard | Saved jobs, application history, filters by status/date, and saved-job availability. |

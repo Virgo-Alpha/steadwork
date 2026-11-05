@@ -12,9 +12,6 @@ export interface JobBoardService {
   getCurrentUser(): Promise<User>;
   registerAccount(input: AccountRegistration): Promise<User>;
   login(input: LoginInput): Promise<User>;
-  verifyEmail(token?: string): Promise<User>;
-  requestPasswordReset(email: string): Promise<void>;
-  completePasswordReset(token: string, password: string): Promise<void>;
   logout(): Promise<void>;
   switchRole(role: 'candidate' | 'company'): Promise<User>;
   getProfile(): Promise<CandidateProfile>;

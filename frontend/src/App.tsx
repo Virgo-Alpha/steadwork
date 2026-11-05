@@ -32,7 +32,7 @@ function AppShell({ children }: { children: ReactNode }) {
   useEffect(() => { user.data && setRole(isEmployerRole(user.data.role) ? 'company' : 'candidate'); }, [user.data]);
   useEffect(() => {
     const onUnauthorized = () => {
-      if (!['/login', '/register', '/forgot-password', '/verify-email'].includes(path)) setLocation(`/login?returnTo=${encodeURIComponent(path)}`);
+      if (!['/login', '/register'].includes(path)) setLocation(`/login?returnTo=${encodeURIComponent(path)}`);
     };
     window.addEventListener('steadwork:unauthorized', onUnauthorized);
     return () => window.removeEventListener('steadwork:unauthorized', onUnauthorized);
@@ -426,19 +426,21 @@ function AccountForm({ mode }: { mode: 'login' | 'register' }) {
     const fields = new FormData(event.currentTarget);
     try {
       if (register) {
-        await service.registerAccount({
+        const user = await service.registerAccount({
           name: String(fields.get('name')),
           email: String(fields.get('email')),
           password: String(fields.get('password')),
           role,
           ...(role === 'company' ? { companyName: String(fields.get('companyName') || '') } : {}),
         });
-        setLocation('/verify-email');
+        const requested = new URLSearchParams(window.location.search).get('returnTo');
+        const safeReturn = requested?.startsWith('/') && !requested.startsWith('//') ? requested : '';
+        setLocation(safeReturn || (isEmployerRole(user.role) ? '/employer' : '/'));
       } else {
         const user = await service.login({ email: String(fields.get('email')), password: String(fields.get('password')) });
         const requested = new URLSearchParams(window.location.search).get('returnTo');
         const safeReturn = requested?.startsWith('/') && !requested.startsWith('//') ? requested : '';
-        setLocation(user.emailVerified ? safeReturn || (isEmployerRole(user.role) ? '/employer' : '/') : '/verify-email');
+        setLocation(safeReturn || (isEmployerRole(user.role) ? '/employer' : '/'));
       }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'We could not continue. Please try again.');
@@ -459,68 +461,11 @@ function AccountForm({ mode }: { mode: 'login' | 'register' }) {
         <button className="btn btn-primary" data-testid={register ? 'button-register' : 'button-login'}>{register ? 'Create account' : 'Sign in'} <ArrowRight size={15}/></button>
       </form>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', borderTop: '1px solid hsl(var(--border))', marginTop: 20, paddingTop: 16, fontSize: 12 }}>
-        {register ? <Link href="/login" className="nav-link" data-testid="link-auth-login">Already have an account? Sign in</Link> : <><Link href="/register" className="nav-link" data-testid="link-auth-register">Create an account</Link><Link href="/forgot-password" className="nav-link" data-testid="link-forgot-password">Forgot password?</Link></>}
+        {register ? <Link href="/login" className="nav-link" data-testid="link-auth-login">Already have an account? Sign in</Link> : <Link href="/register" className="nav-link" data-testid="link-auth-register">Create an account</Link>}
       </div>
       <p className="demo-note">{import.meta.env.VITE_DATA_MODE === 'mock' ? 'Demo mode: account changes stay in this browser and passwords are not stored.' : 'Your password is sent securely to the API and stored only as a one-way hash.'}</p>
     </section>
   </div>;
-}
-function PasswordResetPage() {
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
-  const resetToken = new URLSearchParams(window.location.search).get('token');
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const fields = new FormData(event.currentTarget);
-    try {
-      if (resetToken) await service.completePasswordReset(resetToken, String(fields.get('password')));
-      else await service.requestPasswordReset(String(fields.get('email')));
-      setError('');
-      setMessage(resetToken ? 'Your password has been updated. You can sign in with the new password.' : 'If an account exists for that email, reset instructions have been sent.');
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Enter a valid email address.');
-    }
-  };
-  return <div className="main-wrap page-enter auth-wrap"><section className="surface auth-card">
-    <div className="eyebrow">Account recovery</div><h1 className="font-display" style={{ fontSize: 34, letterSpacing: '-.05em', margin: '10px 0' }}>{resetToken ? 'Choose a new password.' : 'Reset your password.'}</h1>
-    <p style={{ color: 'hsl(var(--muted-foreground))', fontSize: 13, lineHeight: 1.6 }}>{resetToken ? 'Choose a password with at least 8 characters.' : 'Enter your account email and we will send a one-time reset link if an account exists.'}</p>
-    <form onSubmit={submit} style={{ display: 'grid', gap: 14, marginTop: 18 }}>{resetToken ? <label className="form-label">New password<input className="field" type="password" name="password" minLength={8} required autoComplete="new-password" data-testid="input-new-password"/></label> : <label className="form-label">Email address<input className="field" type="email" name="email" required data-testid="input-reset-email"/></label>}<button className="btn btn-primary" data-testid="button-request-reset">{resetToken ? 'Update password' : 'Send reset link'}</button></form>
-    {message && <div role="status" data-testid="status-reset-message" style={{ marginTop: 15, color: 'hsl(var(--primary))', fontSize: 12 }}>{message}</div>}
-    {error && <div role="alert" data-testid="status-reset-error" style={{ marginTop: 15, color: 'hsl(var(--destructive))', fontSize: 12 }}>{error}</div>}
-    <Link href="/login" className="nav-link" data-testid="link-reset-login" style={{ display: 'inline-block', marginTop: 18, fontSize: 12 }}>Back to sign in</Link>
-  </section></div>;
-}
-function VerifyEmailPage() {
-  const { data: user, loading, reload } = useLoad(() => hasSessionToken() ? service.getCurrentUser() : Promise.resolve(null));
-  const [updatedUser, setUpdatedUser] = useState<User | null>(null);
-  const [error, setError] = useState('');
-  const token = new URLSearchParams(window.location.search).get('token') || undefined;
-  useEffect(() => { if (user) setUpdatedUser(user); }, [user]);
-  useEffect(() => {
-    if (!token) return;
-    let live = true;
-    service.verifyEmail(token).then(updated => { if (live) { setUpdatedUser(updated); setError(''); } })
-      .catch(reason => { if (live) setError(reason instanceof Error ? reason.message : 'Email verification could not be completed.'); });
-    return () => { live = false; };
-  }, [token]);
-  const checkStatus = async () => {
-    try {
-      setUpdatedUser(await service.getCurrentUser());
-      setError('');
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Email verification could not be completed.');
-    }
-  };
-  const verified = updatedUser?.emailVerified;
-  return <div className="main-wrap page-enter auth-wrap"><section className="surface auth-card">
-    <div className="eyebrow">{verified ? 'You’re all set' : 'One more step'}</div>
-    <h1 className="font-display" style={{ fontSize: 34, letterSpacing: '-.05em', margin: '10px 0' }}>{verified ? 'Email confirmed.' : 'Check your inbox.'}</h1>
-    <p style={{ color: 'hsl(var(--muted-foreground))', fontSize: 13, lineHeight: 1.6 }}>{loading ? 'Loading account…' : verified ? 'Your email address has been verified.' : updatedUser?.email ? `Open the one-time verification link sent to ${updatedUser.email}.` : 'Open the one-time verification link sent to your email. You can use it here even if you opened it on another device.'}</p>
-    {!verified && hasSessionToken() && !token && <button className="btn btn-outline" data-testid="button-check-verification" onClick={checkStatus} disabled={loading}>Check verification status</button>}
-    {verified && <Link className="btn btn-primary" data-testid="link-continue-after-verification" href={updatedUser?.role === 'company' ? '/employer' : '/'} style={{ marginTop: 10 }}>Continue to steadwork <ArrowRight size={15}/></Link>}
-    {error && <div role="alert" data-testid="status-verification-error" style={{ marginTop: 12, color: 'hsl(var(--destructive))', fontSize: 12 }}>{error}</div>}
-    <p className="demo-note">A one-time link was sent to your email. In local development, the link is printed by the backend email console.</p>
-  </section></div>;
 }
 function LoginPage() { return <AccountForm mode="login"/>; }
 function RegisterPage() { return <AccountForm mode="register"/>; }
@@ -538,8 +483,6 @@ function RoutedPages() {
     <Route path="/notifications" component={() => <ProtectedPage><NotificationsPage/></ProtectedPage>}/>
     <Route path="/login" component={LoginPage}/>
     <Route path="/register" component={RegisterPage}/>
-    <Route path="/forgot-password" component={PasswordResetPage}/>
-    <Route path="/verify-email" component={VerifyEmailPage}/>
     <Route component={NotFoundPage}/>
   </Switch>;
 }
