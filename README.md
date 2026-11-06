@@ -96,6 +96,8 @@ Render is managed with Terraform. After all CI tests pass, GitHub Actions publis
 
 The backend exports OpenTelemetry request and business activity metrics, traces and correlated action logs through Alloy into the self-hosted Prometheus, Tempo and Loki stores. `make run`/`make dev` start that stack automatically with local development; `make compose-up` starts it alongside the containerized app. See the [observability guide](_docs/observability.md) for metric definitions, where to inspect telemetry, trace/log navigation, and how to exercise the local alert.
 
+<img width="848" height="352" alt="bd1811ce-b404-4c3c-ac2a-f338909c95c0_1830x760" src="https://github.com/user-attachments/assets/ee3e774d-72ba-454d-98a7-e98aff5e7112" />
+
 The deployed Render service is not currently configured to export telemetry. A Grafana Cloud OTLP connection is documented as a follow-up assessment in the guide.
 
 ## On-call Agent
