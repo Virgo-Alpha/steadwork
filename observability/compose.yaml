@@ -1,0 +1,89 @@
+name: steadwork-observability
+
+services:
+  alloy:
+    image: grafana/alloy:v1.21.1
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - alloy-data:/var/lib/alloy/data
+    ports:
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
+      - "127.0.0.1:12345:12345"
+    depends_on: [prometheus, loki, tempo]
+    networks: [telemetry]
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v3.16.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-remote-write-receiver
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    networks: [telemetry]
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:3.7.9
+    command: ["-config.file=/etc/loki/loki.yaml"]
+    volumes:
+      - ./loki/loki.yaml:/etc/loki/loki.yaml:ro
+      - loki-data:/loki
+    expose: [3100]
+    networks: [telemetry]
+    restart: unless-stopped
+
+  tempo:
+    image: grafana/tempo:3.1.1
+    command: ["-target=all", "-config.file=/etc/tempo/tempo.yaml"]
+    volumes:
+      - ./tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo-data:/var/tempo
+    expose: [3200, 4317]
+    networks: [telemetry]
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:13.3.0
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in observability/.env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/steadwork-overview.json
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on: [prometheus, loki, tempo]
+    networks: [telemetry]
+    healthcheck:
+      test: ["CMD", "/bin/sh", "-c", "wget -q -O - http://127.0.0.1:3000/api/health >/dev/null"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+      start_period: 20s
+    restart: unless-stopped
+
+volumes:
+  alloy-data:
+  prometheus-data:
+  loki-data:
+  tempo-data:
+  grafana-data:
+
+networks:
+  telemetry:
+    name: steadwork-otel

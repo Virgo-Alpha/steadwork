@@ -1,4 +1,4 @@
-import type { AccountRegistration, Application, ApplicationInput, ApplicationStatus, CandidateProfile, Company, EmployerDashboard, Job, JobFilters, JobStatus, LoginInput, Notification, User } from '../domain/types';
+import type { AccountRegistration, Application, ApplicationInput, ApplicationStatus, CandidateProfile, Company, EmployerApplication, EmployerCandidateProfile, EmployerDashboard, Job, JobFilters, JobStatus, LoginInput, Notification, User } from '../domain/types';
 import type { JobBoardService } from './job-board-service';
 import { ACCESS_TOKEN_KEY, clearSession } from './session';
 
@@ -131,6 +131,8 @@ export class HttpJobBoardService implements JobBoardService {
   updateJob(id: string, input: Partial<Job>) { return protectedRequest<Job>(`/employer/jobs/${id}/`, json('PATCH', input), one<Job>('job', ['id', 'title'])); }
   setJobStatus(id: string, status: JobStatus) { return protectedRequest<Job>(`/employer/jobs/${id}/status/`, json('POST', { status }), one<Job>('job', ['id', 'title'])); }
   listApplicants(id: string) { return protectedRequest<Application[]>(`/employer/jobs/${id}/applications/`, {}, many<Application>('applicants', ['id', 'jobId'])); }
+  listEmployerApplications() { return protectedRequest<EmployerApplication[]>('/employer/applications/', {}, many<EmployerApplication>('employer applications', ['id', 'jobId', 'jobTitle'])); }
+  getApplicantProfile(id: string) { return protectedRequest<EmployerCandidateProfile>(`/employer/applications/${id}/candidate-profile/`, {}, one<EmployerCandidateProfile>('candidate profile', ['userId'])); }
   updateApplicationStatus(id: string, status: ApplicationStatus) { return protectedRequest<Application>(`/employer/applications/${id}/status/`, json('POST', { status }), one<Application>('application', ['id', 'jobId'])); }
   listNotifications() { return protectedRequest<Notification[]>('/notifications/', {}, many<Notification>('notifications', ['id', 'title', 'body'])); }
   markNotificationRead(id: string) { return protectedRequest<void>(`/notifications/${id}/read/`, json('POST')); }

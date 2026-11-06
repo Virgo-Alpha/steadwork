@@ -116,3 +116,16 @@ class NotificationRecord(Base):
     created_at: Mapped[object | None] = mapped_column(DateTime(timezone=True))
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     user: Mapped[UserRecord] = relationship(back_populates="notifications")
+
+
+class ActivityEventRecord(Base):
+    __tablename__ = "activity_events"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    event_type: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    occurred_at: Mapped[object] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    actor_user_id: Mapped[str | None] = mapped_column(String, index=True)
+    actor_role: Mapped[str] = mapped_column(String, nullable=False, default="guest")
+    subject_type: Mapped[str | None] = mapped_column(String)
+    subject_id: Mapped[str | None] = mapped_column(String)
+    application_method: Mapped[str] = mapped_column(String, nullable=False, default="none")
+    origin: Mapped[str] = mapped_column(String, nullable=False, default="live", server_default="live")

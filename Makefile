@@ -5,17 +5,24 @@ BACKEND_PORT ?= 8000
 STATE_DIR ?= .steadwork
 LOG_DIR ?= $(STATE_DIR)/logs
 PLAYWRIGHT_BROWSERS_PATH ?= $(CURDIR)/e2e/.cache/ms-playwright
+STEADWORK_ENVIRONMENT ?= development
+STEADWORK_VERSION ?= local
+STEADWORK_SEED_OBSERVABILITY_DATA ?= true
+OTEL_EXPORTER_OTLP_ENDPOINT ?= http://127.0.0.1:4318
+OTEL_EXPORTER_OTLP_HEADERS ?=
 IMAGE_REF ?=
 IMAGE_TAG ?=
 
 .PHONY: dev run frontend backend install setup stop cleanup e2e test test-fast \
-	e2e-install test-setup test-frontend test-backend deploy deploy-prod apply-dev destroy-dev destroy-prod destroy-bootstrap
+	e2e-install test-setup test-frontend test-backend deploy deploy-prod apply-dev destroy-dev destroy-prod destroy-bootstrap \
+	observability-up observability-down compose-up compose-down
 
 FRONTEND_TEST_COMMAND ?= npm test
 BACKEND_TEST_COMMAND ?= cd backend && uv run pytest -q
 
 dev:
 	@set -eu; \
+	$(MAKE) --no-print-directory observability-up; \
 	mkdir -p "$(LOG_DIR)"; \
 	rm -f "$(STATE_DIR)/frontend.status" "$(STATE_DIR)/backend.status"; \
 	command -v setsid >/dev/null 2>&1 || { printf '%s\n' "make dev requires setsid to isolate service process groups" >&2; exit 1; }; \
@@ -30,11 +37,11 @@ dev:
 		printf '%s\n' "$$!"; \
 	}; \
 	frontend_pid=$$(start_service frontend sh -c 'cd frontend && exec npm run dev -- --host 127.0.0.1 --port "$(FRONTEND_PORT)"'); \
-	backend_pid=$$(start_service backend sh -c 'cd backend && exec uv run python manage.py runserver "127.0.0.1:$(BACKEND_PORT)"'); \
+	backend_pid=$$(start_service backend env STEADWORK_ENVIRONMENT="$(STEADWORK_ENVIRONMENT)" STEADWORK_SEED_OBSERVABILITY_DATA="$(STEADWORK_SEED_OBSERVABILITY_DATA)" DJANGO_SETTINGS_MODULE=steadwork.settings OTEL_SDK_DISABLED=false OTEL_SERVICE_NAME=steadwork-api OTEL_RESOURCE_ATTRIBUTES="deployment.environment.name=$(STEADWORK_ENVIRONMENT),service.version=$(STEADWORK_VERSION)" OTEL_EXPORTER_OTLP_ENDPOINT="$(OTEL_EXPORTER_OTLP_ENDPOINT)" OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf OTEL_EXPORTER_OTLP_HEADERS="$(OTEL_EXPORTER_OTLP_HEADERS)" OTEL_TRACES_EXPORTER=otlp OTEL_METRICS_EXPORTER=otlp OTEL_LOGS_EXPORTER=otlp OTEL_METRIC_EXPORT_INTERVAL=5000 OTEL_PYTHON_DJANGO_EXCLUDED_URLS=/api/health/ OTEL_PYTHON_LOG_CORRELATION=true sh -c 'cd backend && exec uv run opentelemetry-instrument python manage.py runserver "127.0.0.1:$(BACKEND_PORT)"'); \
 	printf '%s\n' "$$frontend_pid" >"$(STATE_DIR)/frontend.pid"; \
 	printf '%s\n' "$$backend_pid" >"$(STATE_DIR)/backend.pid"; \
 	stop_group() { kill -TERM "-$$1" 2>/dev/null || true; }; \
-	cleanup() { stop_group "$$frontend_pid"; stop_group "$$backend_pid"; wait "$$frontend_pid" "$$backend_pid" 2>/dev/null || true; rm -f "$(STATE_DIR)"/frontend.pid "$(STATE_DIR)"/backend.pid; }; \
+	cleanup() { stop_group "$$frontend_pid"; stop_group "$$backend_pid"; wait "$$frontend_pid" "$$backend_pid" 2>/dev/null || true; rm -f "$(STATE_DIR)"/frontend.pid "$(STATE_DIR)"/backend.pid; $(MAKE) --no-print-directory observability-down >/dev/null; }; \
 	trap cleanup EXIT; \
 	trap 'exit 130' INT TERM; \
 	ready=0; attempt=0; \
@@ -44,7 +51,7 @@ dev:
 		attempt=$$((attempt + 1)); sleep 1; \
 	done; \
 	if [ "$$ready" -eq 1 ]; then \
-		printf '%s\n' "Steadwork is running:" "  App:     http://127.0.0.1:$(FRONTEND_PORT)" "  API:     http://127.0.0.1:$(BACKEND_PORT)/api/" "  Logs:    $(LOG_DIR)/frontend.log and $(LOG_DIR)/backend.log"; \
+		printf '%s\n' "Steadwork is running:" "  App:     http://127.0.0.1:$(FRONTEND_PORT)" "  API:     http://127.0.0.1:$(BACKEND_PORT)/api/" "  Grafana: http://127.0.0.1:3000 (credentials in observability/.env)" "  Logs:    $(LOG_DIR)/frontend.log and $(LOG_DIR)/backend.log"; \
 		tail -f "$(LOG_DIR)/frontend.log" "$(LOG_DIR)/backend.log"; \
 	fi; \
 	printf '%s\n' "Services did not become ready within 60 seconds; startup logs follow:" >&2; \
@@ -67,7 +74,7 @@ frontend:
 	cd frontend && npm run dev -- --port "$(FRONTEND_PORT)"
 
 backend:
-	cd backend && uv run python manage.py runserver "127.0.0.1:$(BACKEND_PORT)"
+	cd backend && STEADWORK_ENVIRONMENT="$(STEADWORK_ENVIRONMENT)" STEADWORK_SEED_OBSERVABILITY_DATA="$(STEADWORK_SEED_OBSERVABILITY_DATA)" DJANGO_SETTINGS_MODULE=steadwork.settings OTEL_SDK_DISABLED=false OTEL_SERVICE_NAME=steadwork-api OTEL_RESOURCE_ATTRIBUTES="deployment.environment.name=$(STEADWORK_ENVIRONMENT),service.version=$(STEADWORK_VERSION)" OTEL_EXPORTER_OTLP_ENDPOINT="$(OTEL_EXPORTER_OTLP_ENDPOINT)" OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf OTEL_EXPORTER_OTLP_HEADERS="$(OTEL_EXPORTER_OTLP_HEADERS)" OTEL_TRACES_EXPORTER=otlp OTEL_METRICS_EXPORTER=otlp OTEL_LOGS_EXPORTER=otlp OTEL_METRIC_EXPORT_INTERVAL=5000 OTEL_PYTHON_DJANGO_EXCLUDED_URLS=/api/health/ OTEL_PYTHON_LOG_CORRELATION=true uv run opentelemetry-instrument python manage.py runserver "127.0.0.1:$(BACKEND_PORT)"
 
 install:
 	npm --prefix frontend ci
@@ -145,6 +152,24 @@ test-setup:
 	@$(MAKE) --no-print-directory install
 	@$(MAKE) --no-print-directory e2e-install
 
+observability-up:
+	@if [ ! -f observability/.env ]; then \
+		umask 077; \
+		printf 'GRAFANA_ADMIN_USER=admin\nGRAFANA_ADMIN_PASSWORD=%s\n' "$$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')" > observability/.env; \
+		printf '%s\n' 'Created observability/.env with a random local Grafana password.'; \
+	fi
+	docker compose --project-name steadwork-observability --env-file observability/.env --file observability/compose.yaml up --detach
+
+observability-down:
+	@docker compose --project-name steadwork-observability --env-file observability/.env --file observability/compose.yaml down --remove-orphans 2>/dev/null || true
+
+compose-up: observability-up
+	docker compose --project-name steadwork --file docker-compose.yaml up --build --detach --wait --wait-timeout 240
+
+compose-down:
+	@docker compose --project-name steadwork --file docker-compose.yaml down --remove-orphans
+	@$(MAKE) --no-print-directory observability-down
+
 stop cleanup:
 	@set -eu; \
 	for service in frontend backend; do \
@@ -155,4 +180,5 @@ stop cleanup:
 			printf '%s\n' "Stopped $$service process group (pid $$pid)"; \
 		fi; \
 	done; \
-	rm -f "$(STATE_DIR)"/*.pid "$(STATE_DIR)"/*.status
+	rm -f "$(STATE_DIR)"/*.pid "$(STATE_DIR)"/*.status; \
+	$(MAKE) --no-print-directory observability-down

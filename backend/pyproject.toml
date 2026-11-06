@@ -8,6 +8,11 @@ dependencies = [
     "Django>=5.2,<6.0",
     "djangorestframework>=3.16,<4.0",
     "gunicorn>=23.0,<24.0",
+    "opentelemetry-distro>=0.66b2",
+    "opentelemetry-exporter-otlp>=1.45.2",
+    "opentelemetry-instrumentation-django>=0.66b2",
+    "opentelemetry-instrumentation-logging>=0.66b2",
+    "opentelemetry-instrumentation-psycopg>=0.66b2",
     "psycopg[binary]>=3.2,<4",
     "sqlalchemy>=2.0,<3.0",
 ]

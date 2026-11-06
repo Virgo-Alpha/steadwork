@@ -224,15 +224,17 @@ def test_employer_application_status_notifications_and_cross_user_denial():
     )
     assert updated.status_code == 200
     assert updated.json()["status"] == "Under Review"
-    assert recruiter.post(
+    hired = recruiter.post(
         f"/api/employer/applications/{application_id}/status/",
         {"status": "Hired"},
         format="json",
-    ).status_code == 400
+    )
+    assert hired.status_code == 200
+    assert hired.json()["status"] == "Hired"
 
     notifications = candidate.get("/api/notifications/")
     assert notifications.status_code == 200
-    assert len(notifications.json()) == 1
+    assert len(notifications.json()) == 2
     notification_id = notifications.json()[0]["id"]
     assert {"id", "title", "body", "createdAt"} <= notifications.json()[0].keys()
     assert candidate.post(f"/api/notifications/{notification_id}/read/", format="json").status_code == 204

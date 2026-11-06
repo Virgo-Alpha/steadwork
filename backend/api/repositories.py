@@ -12,9 +12,9 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy import create_engine
 
 from .database import DatabaseConfigurationError, get_database_url
-from .models import Application, Company, Job, Membership, Notification, User
+from .models import ActivityEvent, Application, Company, Job, Membership, Notification, User
 from .orm import (
-    ApplicationRecord, Base, CompanyRecord, JobRecord, MembershipRecord,
+    ActivityEventRecord, ApplicationRecord, Base, CompanyRecord, JobRecord, MembershipRecord,
     NotificationRecord, ProfileRecord, SavedJobRecord, UserRecord,
 )
 
@@ -153,6 +153,26 @@ class SQLAlchemyStoreRepository:
                         ))
                         next_position += 1
                 self.session.flush()
+            from .store import _demo_observability_seed_enabled, _seed
+
+            if _demo_observability_seed_enabled() and self.session.scalar(
+                select(ActivityEventRecord.id).where(ActivityEventRecord.origin == "demo").limit(1)
+            ) is None:
+                demo_seed = _seed()
+                for item in demo_seed.activity_events:
+                    self.session.add(ActivityEventRecord(
+                        id=item.id, event_type=item.event_type, occurred_at=item.occurred_at,
+                        actor_user_id=item.actor_user_id, actor_role=item.actor_role,
+                        subject_type=item.subject_type, subject_id=item.subject_id,
+                        application_method=item.application_method, origin=item.origin,
+                    ))
+                if (
+                    self.session.get(UserRecord, "user-candidate") is not None
+                    and self.session.get(JobRecord, "job-security") is not None
+                    and self.session.get(SavedJobRecord, ("user-candidate", "job-security")) is None
+                ):
+                    self.session.add(SavedJobRecord(user_id="user-candidate", job_id="job-security"))
+                self.session.flush()
         users = [User(row.id, row.email, row.role, row.password_hash, row.name, row.email_verified, row.auth_version) for row in self.session.scalars(select(UserRecord).order_by(UserRecord.position, UserRecord.id)).all()]
         companies = [Company(row.id, row.name, row.description, row.website, row.logo, row.accent) for row in self.session.scalars(select(CompanyRecord).order_by(CompanyRecord.position, CompanyRecord.id)).all()]
         jobs = [
@@ -176,14 +196,23 @@ class SQLAlchemyStoreRepository:
             Notification(row.id, row.user_id, row.title, row.body, row.read_at, row.created_at)
             for row in self.session.scalars(select(NotificationRecord).order_by(NotificationRecord.position, NotificationRecord.id)).all()
         ]
+        activity_events = [
+            ActivityEvent(row.id, row.event_type, row.occurred_at, row.actor_user_id,
+                          row.actor_role, row.subject_type, row.subject_id, row.application_method,
+                          row.origin)
+            for row in self.session.scalars(
+                select(ActivityEventRecord).order_by(ActivityEventRecord.occurred_at, ActivityEventRecord.id)
+            ).all()
+        ]
         from .store import InMemoryStore
 
-        return InMemoryStore(users, companies, jobs, applications, profiles, saved_jobs, memberships, notifications)
+        return InMemoryStore(users, companies, jobs, applications, profiles, saved_jobs,
+                             memberships, notifications, activity_events)
 
     def replace(self, store):
         """Atomically mirror a domain-store snapshot, including removals."""
         models_in_delete_order = [
-            NotificationRecord, SavedJobRecord, MembershipRecord, ProfileRecord,
+            ActivityEventRecord, NotificationRecord, SavedJobRecord, MembershipRecord, ProfileRecord,
             ApplicationRecord, JobRecord, CompanyRecord, UserRecord,
         ]
         for model in models_in_delete_order:
@@ -221,6 +250,13 @@ class SQLAlchemyStoreRepository:
             self.session.add(NotificationRecord(
                 id=item.id, user_id=item.user_id, title=item.title, body=item.body,
                 read_at=item.read_at, created_at=item.created_at, position=position,
+            ))
+        for item in store.activity_events:
+            self.session.add(ActivityEventRecord(
+                id=item.id, event_type=item.event_type, occurred_at=item.occurred_at,
+                actor_user_id=item.actor_user_id, actor_role=item.actor_role,
+                subject_type=item.subject_type, subject_id=item.subject_id,
+                application_method=item.application_method, origin=item.origin,
             ))
         self.session.flush()
 
@@ -294,6 +330,15 @@ class SQLAlchemyStoreRepository:
             lambda item, key: NotificationRecord(
                 id=key, user_id=item.user_id, title=item.title, body=item.body, read_at=item.read_at,
                 created_at=item.created_at, position=after.notifications.index(item),
+            ),
+        )
+        sync(
+            ActivityEventRecord, before.activity_events, after.activity_events, lambda item: item.id,
+            lambda item, key: ActivityEventRecord(
+                id=key, event_type=item.event_type, occurred_at=item.occurred_at,
+                actor_user_id=item.actor_user_id, actor_role=item.actor_role,
+                subject_type=item.subject_type, subject_id=item.subject_id,
+                application_method=item.application_method, origin=item.origin,
             ),
         )
         self.session.flush()

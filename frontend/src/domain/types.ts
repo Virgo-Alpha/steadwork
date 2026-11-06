@@ -21,6 +21,10 @@ export interface Application {
   id: string; jobId: string; candidateId?: string; candidateName: string; candidateEmail: string; cvName: string;
   coverLetter: string; status: ApplicationStatus; createdAt: string;
 }
+export interface EmployerApplication extends Application { jobTitle: string; }
+export interface EmployerCandidateProfile {
+  userId: string; headline: string; location: string; skills: string[]; experience: string; education: string;
+}
 export interface Notification { id: string; title: string; body: string; readAt?: string; createdAt: string; }
 export interface JobFilters {
   keyword?: string; location?: string; jobType?: string; remotePolicy?: string; experienceLevel?: string;

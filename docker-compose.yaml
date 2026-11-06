@@ -21,14 +21,32 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:?set POSTGRES_USER in .env}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:?set POSTGRES_DB in .env}
       STEADWORK_STORE: postgresql
+      DJANGO_SETTINGS_MODULE: steadwork.settings
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-local-compose-development-key}
+      STEADWORK_ENVIRONMENT: ${STEADWORK_ENVIRONMENT:-development}
+      STEADWORK_SEED_OBSERVABILITY_DATA: ${STEADWORK_SEED_OBSERVABILITY_DATA:-true}
+      OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-false}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-steadwork-api}
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment.name=${STEADWORK_ENVIRONMENT:-development},service.version=${STEADWORK_VERSION:-local}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://alloy:4318}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL:-http/protobuf}
+      OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_LOGS_EXPORTER: otlp
+      OTEL_METRIC_EXPORT_INTERVAL: 5000
+      OTEL_PYTHON_DJANGO_EXCLUDED_URLS: /api/health/
+      OTEL_PYTHON_LOG_CORRELATION: "true"
     depends_on:
       postgres:
         condition: service_healthy
-    command: ["sh", "-c", "uv run --no-sync alembic upgrade head && exec uv run --no-sync gunicorn steadwork.wsgi:application --bind 0.0.0.0:8000 --workers 1 --access-logfile - --error-logfile -"]
+    command: ["sh", "-c", "uv run --no-sync alembic upgrade head && exec uv run --no-sync opentelemetry-instrument gunicorn steadwork.wsgi:application --bind 0.0.0.0:8000 --workers 1 --access-logfile - --error-logfile -"]
     ports:
       - "8000:8000"
+    networks:
+      - default
+      - telemetry
     healthcheck:
       test: ["CMD", "python", "-c", "import json,urllib.request; r=urllib.request.urlopen('http://127.0.0.1:8000/api/health/', timeout=2); assert r.status == 200 and json.load(r)['store'] == 'postgresql'"]
       interval: 5s
@@ -38,3 +56,8 @@ services:
 
 volumes:
   postgres-data:
+
+networks:
+  telemetry:
+    name: steadwork-otel
+    external: true

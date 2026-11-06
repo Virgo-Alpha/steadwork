@@ -28,13 +28,13 @@ Current API behavior includes public job and company reads; bearer-token login; 
 
 ## Local setup and commands
 
-Requirements: Node.js/npm for the frontend, Python and [uv](https://docs.astral.sh/uv/) for the backend, and Docker Compose for the full browser suite. From the repository root:
+Requirements: Node.js/npm for the frontend, Python and [uv](https://docs.astral.sh/uv/) for the backend, and Docker Compose for local observability and the browser suite. From the repository root:
 
 ```sh
 make run
 ```
 
-`make run` runs `make install`, applies the local SQLite migrations, starts Vite and Django, waits for both health checks, then prints the app and API URLs and streams service logs to the terminal. Open <http://127.0.0.1:5173>; the API is at <http://127.0.0.1:8000/api/>. Stop with Ctrl-C or `make stop`. To install dependencies without starting the app, run `make install`; to start already-installed services, run `make dev`. Individual targets are `make frontend` and `make backend`. Ports can be changed with `make run FRONTEND_PORT=5174 BACKEND_PORT=8001`.
+`make run` runs `make install`, applies the local SQLite migrations, starts the self-hosted observability Compose project, Vite and instrumented Django, then waits for the app health checks. Open <http://127.0.0.1:5173>; the API is at <http://127.0.0.1:8000/api/> and Grafana is at <http://127.0.0.1:3000>. The first start creates `observability/.env` with a random local Grafana password. Stop with Ctrl-C or `make stop`; telemetry data remains in named volumes. To install dependencies without starting the app, run `make install`; to start already-installed services, run `make dev`. Ports can be changed with `make run FRONTEND_PORT=5174 BACKEND_PORT=8001`.
 
 ## Agent team and process
 
@@ -71,11 +71,11 @@ The root [`docker-compose.yaml`](docker-compose.yaml) defines two services: `pos
 ```sh
 cp .env.example .env
 # Edit .env and replace POSTGRES_PASSWORD with a private random value.
-docker compose up --build -d
-docker compose logs -f app postgres
+make compose-up
+docker compose --project-name steadwork logs -f app postgres
 ```
 
-`docker compose down` stops the services and preserves database data. `docker compose down -v` deletes the PostgreSQL volume and all its data. Keep `.env` private; it is ignored by Git. Compose is also used by the isolated browser E2E harness.
+`make compose-up` starts the separate observability project and the app/PostgreSQL project together. `make compose-down` stops both and preserves their volumes. To delete persistent data, remove volumes explicitly with `docker compose --project-name steadwork down -v` and `docker compose --project-name steadwork-observability --env-file observability/.env --file observability/compose.yaml down -v`. Keep both `.env` files private; they are ignored by Git. Compose is also used by the isolated browser E2E harness.
 
 ## Deployment
 
@@ -92,10 +92,11 @@ Render is managed with Terraform. After all CI tests pass, GitHub Actions publis
 
 <img width="1899" height="463" alt="image" src="https://github.com/user-attachments/assets/35752a8c-ebf0-4e8c-af76-208b73b70c8c" />
 
-## Observability and Monitority
-TODO: Create observability_and_monitoring.md and add telemetry using OpenTelemetry, Prometheus and Grafana
-TODO: A key user journey is instrumented with metrics, traces, and structured logs that share a trace ID; no customer data or credentials are sent to telemetry; and the signals are collected, stored, and viewable in a UI.
-TODO: Add an alert on user impact and break something to test that it works
+## Observability
+
+The backend exports OpenTelemetry request and business activity metrics, traces and correlated action logs through Alloy into the self-hosted Prometheus, Tempo and Loki stores. `make run`/`make dev` start that stack automatically with local development; `make compose-up` starts it alongside the containerized app. See the [observability guide](_docs/observability.md) for metric definitions, where to inspect telemetry, trace/log navigation, and how to exercise the local alert.
+
+The deployed Render service is not currently configured to export telemetry. A Grafana Cloud OTLP connection is documented as a follow-up assessment in the guide.
 
 ## On-call Agent
 TODO: Add an agent wakes up on an alert and fixes the issue.

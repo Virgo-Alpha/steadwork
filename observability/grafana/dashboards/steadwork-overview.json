@@ -1,0 +1,808 @@
+{
+  "id": null,
+  "uid": "steadwork-overview",
+  "title": "Steadwork service overview",
+  "tags": [
+    "steadwork",
+    "application-observability"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 41,
+  "version": 1,
+  "refresh": "15s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "environment",
+        "label": "Environment",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": "label_values(http_server_duration_milliseconds_count{service_name=\"steadwork-api\"}, deployment_environment_name)",
+        "refresh": 2,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": "development",
+          "value": "development"
+        },
+        "sort": 1
+      },
+      {
+        "name": "version",
+        "label": "Deployed version",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": "label_values(http_server_duration_milliseconds_count{service_name=\"steadwork-api\",deployment_environment_name=~\"$environment\"}, service_version)",
+        "refresh": 2,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": "local",
+          "value": "local"
+        },
+        "sort": 1
+      },
+      {
+        "name": "origin",
+        "label": "Activity origin",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": "label_values(steadwork_business_events_rolling, origin)",
+        "refresh": 2,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "sort": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "API requests per second",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(http_server_duration_milliseconds_count{service_name=\"steadwork-api\",deployment_environment_name=~\"$environment\",service_version=~\"$version\"}[$__rate_interval]))",
+          "legendFormat": "requests/s",
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "5xx request ratio",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "((sum(rate(http_server_duration_milliseconds_count{service_name=\"steadwork-api\",deployment_environment_name=~\"$environment\",service_version=~\"$version\",http_status_code=~\"5..\"}[$__rate_interval])) or vector(0)) / clamp_min(sum(rate(http_server_duration_milliseconds_count{service_name=\"steadwork-api\",deployment_environment_name=~\"$environment\",service_version=~\"$version\"}[$__rate_interval])), 0.000001)) and on() (sum(rate(http_server_duration_milliseconds_count{service_name=\"steadwork-api\",deployment_environment_name=~\"$environment\",service_version=~\"$version\"}[$__rate_interval])) > 0)",
+          "legendFormat": "5xx ratio",
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.01
+              },
+              {
+                "color": "red",
+                "value": 0.05
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "p95 request duration",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_duration_milliseconds_bucket{service_name=\"steadwork-api\",deployment_environment_name=~\"$environment\",service_version=~\"$version\"}[$__rate_interval]))) and on() (sum(rate(http_server_duration_milliseconds_count{service_name=\"steadwork-api\",deployment_environment_name=~\"$environment\",service_version=~\"$version\"}[$__rate_interval])) > 0)",
+          "legendFormat": "p95",
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "description": "95th percentile request duration from Django HTTP server metrics, in milliseconds."
+    },
+    {
+      "id": 4,
+      "title": "User actions by outcome",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (action, outcome) (rate(steadwork_user_action_total{deployment_environment_name=~\"$environment\",service_version=~\"$version\"}[$__rate_interval]))",
+          "legendFormat": "{{action}} \u00b7 {{outcome}}",
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Recent user-action logs",
+      "type": "logs",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 54
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{service_name=\"steadwork-api\", deployment_environment_name=~\"$environment\", service_version=~\"$version\"} |= \"user_action_\"",
+          "queryType": "range"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": true,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "dedupStrategy": "none",
+        "enableLogDetails": true
+      },
+      "description": "Recent user action logs filtered by the dashboard environment and deployed version selectors."
+    },
+    {
+      "id": 6,
+      "title": "Business events in the last 24 hours",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 32
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (event, origin) (steadwork_business_events_rolling{deployment_environment_name=~\"$environment\",service_version=~\"$version\",origin=~\"$origin\",window=\"24h\"})",
+          "legendFormat": "{{event}} \u00b7 {{origin}}",
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "description": "Persisted events during the rolling 24h window; demo and live series are identified separately."
+    },
+    {
+      "id": 7,
+      "title": "Business events in the last 7 days",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 32
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (event, origin) (steadwork_business_events_rolling{deployment_environment_name=~\"$environment\",service_version=~\"$version\",origin=~\"$origin\",window=\"7d\"})",
+          "legendFormat": "{{event}} \u00b7 {{origin}}",
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "description": "Persisted events during the rolling 7d window; demo and live series are identified separately."
+    },
+    {
+      "id": 8,
+      "title": "Registered users by role",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 40
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "steadwork_users{deployment_environment_name=~\"$environment\",service_version=~\"$version\"}",
+          "legendFormat": "{{role}}",
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 9,
+      "title": "Successful-login active users",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 40
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "steadwork_active_users{deployment_environment_name=~\"$environment\",service_version=~\"$version\"}",
+          "legendFormat": "rolling {{window}}",
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 10,
+      "title": "Current published jobs and saved jobs",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 40
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "steadwork_published_jobs{deployment_environment_name=~\"$environment\",service_version=~\"$version\"}",
+          "legendFormat": "published jobs",
+          "range": true
+        },
+        {
+          "refId": "B",
+          "expr": "steadwork_saved_jobs{deployment_environment_name=~\"$environment\",service_version=~\"$version\"}",
+          "legendFormat": "saved jobs",
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 11,
+      "title": "Mean applications per applying candidate",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 47
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "steadwork_applications_per_active_candidate{deployment_environment_name=~\"$environment\",service_version=~\"$version\"}",
+          "legendFormat": "rolling {{window}}",
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 12,
+      "title": "Registrations and logins (rolling 24h)",
+      "type": "timeseries",
+      "description": "Persisted business events during the rolling 24-hour window, split by demo or live origin.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 24
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (event, origin) (steadwork_business_events_rolling{deployment_environment_name=~\"$environment\",service_version=~\"$version\",origin=~\"$origin\",event=~\"user_registered|login_succeeded\",window=\"24h\"})",
+          "legendFormat": "{{event}} \u00b7 {{origin}}",
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 13,
+      "title": "Applications submitted, withdrawn, rejected (rolling 24h)",
+      "type": "timeseries",
+      "description": "Persisted business events during the rolling 24-hour window, split by demo or live origin.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 24
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (event, origin) (steadwork_business_events_rolling{deployment_environment_name=~\"$environment\",service_version=~\"$version\",origin=~\"$origin\",event=~\"application_submitted|application_withdrawn|application_rejected\",window=\"24h\"})",
+          "legendFormat": "{{event}} \u00b7 {{origin}}",
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 14,
+      "title": "Job and saved-job activity (rolling 24h)",
+      "type": "timeseries",
+      "description": "Persisted business events during the rolling 24-hour window, split by demo or live origin.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 24
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (event, origin) (steadwork_business_events_rolling{deployment_environment_name=~\"$environment\",service_version=~\"$version\",origin=~\"$origin\",event=~\"job_published|job_saved|job_unsaved|external_apply_clicked\",window=\"24h\"})",
+          "legendFormat": "{{event}} \u00b7 {{origin}}",
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 15,
+      "title": "30-day request success SLI",
+      "type": "stat",
+      "description": "1 - (5xx requests / eligible requests) over 30 days. All requests except 5xx, including 4xx responses, count as successful. No eligible requests returns no data.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 16
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(1 - ((sum(increase(http_server_duration_milliseconds_count{service_name=\"steadwork-api\",deployment_environment_name=~\"$environment\",service_version=~\"$version\",http_status_code=~\"5..\"}[30d])) or vector(0)) / clamp_min(sum(increase(http_server_duration_milliseconds_count{service_name=\"steadwork-api\",deployment_environment_name=~\"$environment\",service_version=~\"$version\"}[30d])), 1))) and (sum(increase(http_server_duration_milliseconds_count{service_name=\"steadwork-api\",deployment_environment_name=~\"$environment\",service_version=~\"$version\"}[30d])) > 0)",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 0.99
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 16,
+      "title": "Successful tracked actions (rolling 24h)",
+      "type": "timeseries",
+      "description": "Persisted successful registration, login, job-status, application, withdrawal, and review events. Demo and live event history are separated by origin. This is distinct from the live request outcome counter.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 16,
+        "x": 8,
+        "y": 16
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (action, outcome, origin) (steadwork_user_actions_rolling{service_name=\"steadwork-api\",deployment_environment_name=~\"$environment\",service_version=~\"$version\",origin=~\"$origin\",window=\"24h\"})",
+          "legendFormat": "{{action}} \u00b7 {{outcome}} \u00b7 {{origin}}",
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    }
+  ],
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  }
+}

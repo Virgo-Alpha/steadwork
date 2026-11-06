@@ -7,7 +7,8 @@ from .routers import (
     register, recommended_jobs, logout, email_account_action_disabled,
     unsave_job, withdraw_application,
     employer_dashboard, employer_jobs, employer_job, employer_job_status,
-    employer_applications, employer_application_status, notifications, notification_read,
+    employer_applications, employer_all_applications, employer_candidate_profile,
+    employer_application_status, notifications, notification_read,
 )
 
 urlpatterns = [
@@ -41,6 +42,8 @@ urlpatterns = [
     path("employer/jobs/<str:job_id>/", employer_job, name="employer-job"),
     path("employer/jobs/<str:job_id>/status/", employer_job_status, name="employer-job-status"),
     path("employer/jobs/<str:job_id>/applications/", employer_applications, name="employer-applications"),
+    path("employer/applications/", employer_all_applications, name="employer-all-applications"),
+    path("employer/applications/<str:application_id>/candidate-profile/", employer_candidate_profile, name="employer-candidate-profile"),
     path("employer/applications/<str:application_id>/status/", employer_application_status, name="employer-application-status"),
     path("notifications/", notifications, name="notifications"),
     path("notifications/<str:notification_id>/read/", notification_read, name="notification-read"),

@@ -465,11 +465,45 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /employer/applications/:
+    get:
+      tags: [Employer, Applications]
+      operationId: listEmployerApplications
+      summary: List applicants across jobs owned by the authenticated employer's company
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Company applications with their job titles
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/EmployerApplication' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /employer/applications/{applicationId}/candidate-profile/:
+    get:
+      tags: [Employer, Applications]
+      operationId: getApplicantProfile
+      summary: Get a limited profile for a registered applicant to an owned job
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: applicationId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Employer-safe candidate profile summary
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EmployerCandidateProfile' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /employer/applications/{applicationId}/status/:
     post:
       tags: [Employer, Applications]
       operationId: updateApplicationStatus
-      summary: Advance an application to an allowed status
+      summary: Set an application to any defined application status
       security: [{ bearerAuth: [] }]
       parameters:
         - name: applicationId
@@ -680,6 +714,23 @@ components:
         coverLetter: { type: string }
         status: { $ref: '#/components/schemas/ApplicationStatus' }
         createdAt: { type: string, format: date-time }
+    EmployerApplication:
+      allOf:
+        - $ref: '#/components/schemas/Application'
+        - type: object
+          required: [jobTitle]
+          properties:
+            jobTitle: { type: string }
+    EmployerCandidateProfile:
+      type: object
+      required: [userId, headline, location, skills, experience, education]
+      properties:
+        userId: { type: string }
+        headline: { type: string }
+        location: { type: string }
+        skills: { type: array, items: { type: string } }
+        experience: { type: string }
+        education: { type: string }
     EmployerDashboard:
       type: object
       required: [companyName, activeJobs, totalJobs, applications, shortlisted, recent]

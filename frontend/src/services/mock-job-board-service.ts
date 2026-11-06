@@ -1,4 +1,4 @@
-import type { AccountRegistration, Application, ApplicationInput, ApplicationStatus, CandidateProfile, Company, EmployerDashboard, Job, JobFilters, JobStatus, LoginInput, Notification, User } from '../domain/types';
+import type { AccountRegistration, Application, ApplicationInput, ApplicationStatus, CandidateProfile, Company, EmployerApplication, EmployerCandidateProfile, EmployerDashboard, Job, JobFilters, JobStatus, LoginInput, Notification, User } from '../domain/types';
 import type { JobBoardService } from './job-board-service';
 
 const companies: Company[] = [
@@ -122,6 +122,18 @@ export class MockJobBoardService implements JobBoardService {
   async updateJob(id: string, input: Partial<Job>) { const i = this.state.jobs.findIndex(j => j.id === id); if (i < 0) throw new Error('Job not found'); this.state.jobs[i] = { ...this.state.jobs[i], ...input }; this.persist(); return structuredClone(this.state.jobs[i]); }
   async setJobStatus(id: string, status: JobStatus) { return this.updateJob(id, { status }); }
   async listApplicants(jobId: string) { return structuredClone(this.state.applications.filter(a => a.jobId === jobId)); }
+  async listEmployerApplications(): Promise<EmployerApplication[]> {
+    const jobs = this.state.jobs.filter(j => j.companyId === 'c-northstar');
+    return structuredClone(this.state.applications.flatMap(app => {
+      const job = jobs.find(item => item.id === app.jobId);
+      return job ? [{ ...app, jobTitle: job.title }] : [];
+    }));
+  }
+  async getApplicantProfile(applicationId: string): Promise<EmployerCandidateProfile> {
+    const app = this.state.applications.find(item => item.id === applicationId);
+    if (!app?.candidateId || !this.state.jobs.some(job => job.companyId === 'c-northstar' && job.id === app.jobId)) throw new Error('Candidate profile not found.');
+    return { userId: app.candidateId, headline: '', location: '', skills: [], experience: '', education: '' };
+  }
   async updateApplicationStatus(id: string, status: ApplicationStatus) { const a = this.state.applications.find(x => x.id === id); if (!a) throw new Error('Application not found'); a.status = status; this.state.notifications.unshift({ id: `note-${Date.now()}`, title: 'Application status updated', body: `${a.candidateName} is now marked ${status}.`, createdAt: new Date().toISOString().slice(0,10) }); this.persist(); return structuredClone(a); }
   async listNotifications() { return structuredClone(this.state.notifications); }
   async markNotificationRead(id: string) { const n = this.state.notifications.find(x => x.id === id); if (n) n.readAt = new Date().toISOString(); this.persist(); }

@@ -1,0 +1,74 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: steadwork-user-impact
+    folder: Steadwork
+    interval: 1m
+    rules:
+      - uid: steadwork-application-errors
+        title: Repeated application submission failures
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: sum by (service_name, deployment_environment_name, service_version) (increase(steadwork_user_action_total{action="submit_application",outcome="server_error"}[10m])) >= 3
+              instant: true
+              range: false
+              refId: A
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: Repeated application submission failures
+          description: At least three application submissions failed on the server in the last ten minutes.
+          service: "{{ $labels.service_name }}"
+          environment: "{{ $labels.deployment_environment_name }}"
+          version: "{{ $labels.service_version }}"
+          owner: steadwork-maintainers
+          dashboard: http://localhost:3000/d/steadwork-overview/steadwork-overview?var-environment={{ $labels.deployment_environment_name }}
+        labels:
+          severity: warning
+          owner: steadwork-maintainers
+
+      - uid: steadwork-duplicate-registration-smoke
+        title: Local smoke test - duplicate registrations
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: sum by (service_name, deployment_environment_name, service_version) (increase(steadwork_user_action_total{action="register",outcome="duplicate_email"}[5m])) >= 3
+              instant: true
+              range: false
+              refId: A
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        isPaused: true
+        annotations:
+          summary: Local smoke test alert for duplicate registration attempts
+          description: This test-only rule verifies alert evaluation. Pause it again after the local check.
+          service: "{{ $labels.service_name }}"
+          environment: "{{ $labels.deployment_environment_name }}"
+          version: "{{ $labels.service_version }}"
+          owner: steadwork-maintainers
+          dashboard: http://localhost:3000/d/steadwork-overview/steadwork-overview?var-environment={{ $labels.deployment_environment_name }}
+        labels:
+          severity: info
+          owner: steadwork-maintainers

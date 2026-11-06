@@ -4,7 +4,7 @@ import { ArrowDownUp, ArrowLeft, ArrowRight, Bell, Bookmark, BriefcaseBusiness, 
 import { createPortal } from 'react-dom';
 import { jobBoardService as service } from '@/services';
 import { hasSessionToken } from '@/services/session';
-import type { Application, ApplicationStatus, CandidateProfile, Job, JobFilters, JobStatus, Notification, User } from '@/domain/types';
+import type { Application, ApplicationStatus, CandidateProfile, EmployerApplication, EmployerCandidateProfile, Job, JobFilters, JobStatus, Notification, User } from '@/domain/types';
 
 function useLoad<T>(loader: () => Promise<T>, deps: unknown[] = []) {
   const [data, setData] = useState<T | null>(null);
@@ -48,7 +48,12 @@ function AppShell({ children }: { children: ReactNode }) {
       setToast(reason instanceof Error ? reason.message : 'Unable to switch role.');
     }
   };
-  const nav = [
+  const nav = role === 'company' ? [
+    { href: '/', label: 'Find roles', icon: Search },
+    { href: '/employer/applications', label: 'Applicants', icon: Users },
+    { href: '/employer', label: 'Hiring overview', icon: BriefcaseBusiness },
+    { href: '/employer/jobs', label: 'Manage roles', icon: ClipboardList },
+  ] : [
     { href: '/', label: 'Find roles', icon: Search }, { href: '/saved', label: 'Saved', icon: Bookmark },
     { href: '/applications', label: 'Applications', icon: ClipboardList }, { href: '/profile', label: 'My profile', icon: CircleUserRound },
   ];
@@ -59,8 +64,7 @@ function AppShell({ children }: { children: ReactNode }) {
           <span className="brand-mark">S</span><span style={{ fontFamily: 'var(--app-font-serif)', fontSize: 19, fontWeight: 800, letterSpacing: '-.06em' }}>steadwork<span style={{ color: 'hsl(var(--primary))' }}>.</span></span>
         </Link>
         <nav className="desktop-nav" style={{ display: 'flex', alignItems: 'center', gap: 28, flex: 1, marginLeft: 28 }}>
-          {nav.map(({ href, label }) => <Link key={href} href={href} className={`nav-link ${path === href ? 'active' : ''}`} data-testid={`nav-${label.toLowerCase().replaceAll(' ', '-')}`} style={{ fontSize: 13, fontWeight: path === href ? 700 : 500 }}>{label}</Link>)}
-          {role === 'company' && <><Link href="/employer" className={`nav-link ${path === '/employer' ? 'active' : ''}`} data-testid="nav-employer" style={{ fontSize: 13, fontWeight: 600 }}>Hiring overview</Link><Link href="/employer/jobs" className={`nav-link ${path.startsWith('/employer/jobs') ? 'active' : ''}`} data-testid="nav-manage-jobs" style={{ fontSize: 13 }}>Manage roles</Link></>}
+          {nav.map(({ href, label }) => <Link key={href} href={href} className={`nav-link ${path === href || href === '/employer/jobs' && path.startsWith('/employer/jobs') ? 'active' : ''}`} data-testid={href === '/employer' ? 'nav-employer' : href === '/employer/applications' ? 'nav-employer-applications' : `nav-${label.toLowerCase().replaceAll(' ', '-')}`} style={{ fontSize: 13, fontWeight: path === href ? 700 : 500 }}>{label}</Link>)}
         </nav>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div className="auth-links" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -76,7 +80,7 @@ function AppShell({ children }: { children: ReactNode }) {
         </div>
       </div>
       <div className="mobile-nav" style={{ display: 'none', borderTop: '1px solid hsl(var(--border))', justifyContent: 'space-around', padding: '9px 4px', background: 'hsl(var(--background))' }}>
-        {[...nav.slice(0,3), nav[3], ...(role === 'company' ? [{ href: '/employer', label: 'Hiring', icon: BriefcaseBusiness }] : [])].map(({ href, label, icon: Icon }) => <Link key={href} href={href} className="nav-link" data-testid={`mobile-nav-${label}`} style={{ display: 'grid', justifyItems: 'center', fontSize: 10, gap: 3 }}><Icon size={17}/>{label}</Link>)}
+        {nav.map(({ href, label, icon: Icon }) => <Link key={href} href={href} className="nav-link" data-testid={`mobile-nav-${label}`} style={{ display: 'grid', justifyItems: 'center', fontSize: 10, gap: 3 }}><Icon size={17}/>{label}</Link>)}
         <Link href="/login" className="nav-link" data-testid="mobile-nav-account" style={{ display: 'grid', justifyItems: 'center', fontSize: 10, gap: 3 }}><CircleUserRound size={17}/>Account</Link>
       </div>
     </header>
@@ -489,17 +493,55 @@ function JobEditorPage() {
   </div>;
 }
 function SelectField({ label, test, value, options, onChange }: { label: string; test: string; value: string; options: string[]; onChange: (v: string) => void }) { return <label className="form-label">{label}<select className="field" data-testid={test} value={value} onChange={e => onChange(e.target.value)}>{options.map(o => <option key={o}>{o}</option>)}</select></label>; }
+function ApplicantRow({ application, rowTestId }: { application: Application & { jobTitle?: string }; rowTestId: string }) {
+  const [selectedStatus, setSelectedStatus] = useState<ApplicationStatus>(application.status);
+  const [savedStatus, setSavedStatus] = useState<ApplicationStatus>(application.status);
+  const [notice, setNotice] = useState('');
+  useEffect(() => { setSelectedStatus(application.status); setSavedStatus(application.status); }, [application.status]);
+  const saveStatus = async () => {
+    try {
+      const updated = await service.updateApplicationStatus(application.id, selectedStatus);
+      setSelectedStatus(updated.status); setSavedStatus(updated.status);
+      setNotice(`${application.candidateName} marked ${updated.status}.`);
+    } catch (reason) { setNotice(reason instanceof Error ? reason.message : 'Could not update application status.'); }
+  };
+  return <div data-testid={rowTestId} style={{ padding: 19, display: 'grid', gridTemplateColumns: '1fr auto', gap: 16, alignItems: 'center' }}>
+    <div>
+      {application.jobTitle && <Link href={`/employer/jobs/${application.jobId}/applicants`} data-testid={`link-applicant-job-${application.id}`} style={{ fontSize: 11, color: 'hsl(var(--muted-foreground))' }}>{application.jobTitle}</Link>}
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginTop: application.jobTitle ? 5 : 0 }}><strong style={{ fontFamily: 'var(--app-font-serif)', fontSize: 16 }}>{application.candidateName}</strong><StatusPill value={savedStatus}/></div>
+      <div style={{ fontSize: 11, color: 'hsl(var(--muted-foreground))', marginTop: 6 }}>{application.candidateEmail} · Applied {application.createdAt} · CV filename: {application.cvName}</div>
+      {application.coverLetter && <p style={{ fontSize: 12, color: 'hsl(var(--muted-foreground))', lineHeight: 1.55, maxWidth: 630, margin: '10px 0 0' }}>{application.coverLetter}</p>}
+      {application.candidateId && <Link className="nav-link" href={`/employer/applications/${application.id}/candidate-profile`} data-testid={`link-applicant-profile-${application.id}`} style={{ display: 'inline-block', fontSize: 11, marginTop: 9 }}>View candidate profile</Link>}
+      {notice && <div role="status" data-testid={`status-applicant-save-${application.id}`} style={{ marginTop: 8, color: 'hsl(var(--primary))', fontSize: 11 }}>{notice}</div>}
+    </div>
+    <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'end', gap: 6, alignItems: 'center' }}>
+      <select aria-label={`Update status for ${application.candidateName}`} className="field" data-testid={`select-applicant-status-${application.id}`} style={{ width: 150, minHeight: 35, padding: '6px 8px' }} value={selectedStatus} onChange={event => setSelectedStatus(event.target.value as ApplicationStatus)}>{['Applied','Under Review','Shortlisted','Rejected','Hired','Withdrawn','External click'].map(value => <option key={value}>{value}</option>)}</select>
+      <button type="button" className="btn btn-outline" data-testid={`button-save-applicant-status-${application.id}`} onClick={saveStatus} disabled={selectedStatus === savedStatus} style={{ minHeight: 35, fontSize: 11 }}>Save</button>
+    </div>
+  </div>;
+}
+function EmployerApplicationsPage() {
+  const { data, loading, error, reload } = useLoad(() => service.listEmployerApplications());
+  const applications = data || [];
+  return <div className="main-wrap page-enter" style={{ paddingTop: 42, maxWidth: 1000 }}><PageTitle kicker="Hiring desk" title="Applicants" subtitle={`${applications.length} applications across your roles.`}/>
+    {loading ? <div className="surface skeleton" style={{ height: 220 }}/> : error ? <ErrorState message={error} retry={reload}/> : applications.length ? <div className="surface" style={{ overflow: 'hidden' }}>{applications.map((application, index) => <div key={application.id} style={{ borderBottom: index === applications.length - 1 ? 0 : '1px solid hsl(var(--border))' }}><ApplicantRow application={application} rowTestId={`row-employer-application-${application.id}`}/></div>)}</div> : <EmptyState title="No applicants yet" body="Applications for your roles will appear here." action={<Link className="btn btn-primary" href="/employer/jobs">View roles</Link>}/>}
+  </div>;
+}
 function ApplicantsPage() {
   const { id = '' } = useParams();
   const { data: job } = useLoad(() => service.getJob(id), [id]);
   const { data, loading, error, reload } = useLoad(() => service.listApplicants(id), [id]);
-  const [apps, setApps] = useState<Application[]>([]);
-  const [notice, setNotice] = useState('');
-  useEffect(() => setApps(data || []), [data]);
-  const updateStatus = async (app: Application, status: ApplicationStatus) => { try { const result = await service.updateApplicationStatus(app.id, status); setApps(xs => xs.map(x => x.id === app.id ? result : x)); setNotice(`${app.candidateName} marked ${status}.`); } catch (reason) { setNotice(reason instanceof Error ? reason.message : 'Could not update application status.'); } };
-  return <div className="main-wrap page-enter" style={{ paddingTop: 42, maxWidth: 1000 }}><Link href="/employer/jobs" className="nav-link" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, marginBottom: 20 }}><ArrowLeft size={14}/> Manage roles</Link><PageTitle kicker="Hiring desk · candidates" title={job?.title || 'Applicants'} subtitle={`${apps.length} people have raised their hand for this role.`}/>
-    {notice && <div role="alert" style={{ marginBottom: 12, color: 'hsl(var(--primary))', fontSize: 12 }}>{notice}</div>}
-    {loading ? <div className="surface skeleton" style={{ height: 180 }}/> : error ? <ErrorState message={error} retry={reload}/> : apps.length ? <div className="surface" style={{ overflow: 'hidden' }}>{apps.map((app,i) => <div key={app.id} data-testid={`row-applicant-${app.id}`} style={{ padding: 19, borderBottom: i === apps.length-1 ? 0 : '1px solid hsl(var(--border))', display: 'grid', gridTemplateColumns: '1fr auto', gap: 16, alignItems: 'center' }}><div><div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}><strong style={{ fontFamily: 'var(--app-font-serif)', fontSize: 16 }}>{app.candidateName}</strong><StatusPill value={app.status}/></div><div style={{ fontSize: 11, color: 'hsl(var(--muted-foreground))', marginTop: 6 }}>{app.candidateEmail} · Applied {app.createdAt} · CV: {app.cvName}</div>{app.coverLetter && <p style={{ fontSize: 12, color: 'hsl(var(--muted-foreground))', lineHeight: 1.55, maxWidth: 630, margin: '10px 0 0' }}>{app.coverLetter}</p>}</div><div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'end', gap: 6 }}><select aria-label={`Update status for ${app.candidateName}`} className="field" data-testid={`select-applicant-status-${app.id}`} style={{ width: 150, minHeight: 35, padding: '6px 8px' }} value={app.status} onChange={e => updateStatus(app,e.target.value as ApplicationStatus)}>{['Applied','Under Review','Shortlisted','Rejected','Hired','Withdrawn','External click'].map(x => <option key={x}>{x}</option>)}</select><a className="btn btn-outline" href={`mailto:${app.candidateEmail}`} data-testid={`link-email-applicant-${app.id}`} style={{ minHeight: 35, fontSize: 11 }}>Email</a></div></div>)}</div> : <EmptyState title="No applications yet" body="When someone applies, their details and status controls will appear here."/>}
+  const applications = data || [];
+  return <div className="main-wrap page-enter" style={{ paddingTop: 42, maxWidth: 1000 }}><Link href="/employer/jobs" className="nav-link" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, marginBottom: 20 }}><ArrowLeft size={14}/> Manage roles</Link><PageTitle kicker="Hiring desk · candidates" title={job?.title || 'Applicants'} subtitle={`${applications.length} people have raised their hand for this role.`}/>
+    {loading ? <div className="surface skeleton" style={{ height: 180 }}/> : error ? <ErrorState message={error} retry={reload}/> : applications.length ? <div className="surface" style={{ overflow: 'hidden' }}>{applications.map(application => <div key={application.id} style={{ borderBottom: '1px solid hsl(var(--border))' }}><ApplicantRow application={application} rowTestId={`row-applicant-${application.id}`}/></div>)}</div> : <EmptyState title="No applications yet" body="When someone applies, their details and status controls will appear here."/>}
+  </div>;
+}
+function ApplicantProfilePage() {
+  const { applicationId = '' } = useParams();
+  const { data, loading, error, reload } = useLoad(() => service.getApplicantProfile(applicationId), [applicationId]);
+  const profile = data as EmployerCandidateProfile | null;
+  return <div className="main-wrap page-enter" style={{ paddingTop: 42, maxWidth: 830 }}><Link href="/employer/applications" className="nav-link" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, marginBottom: 20 }}><ArrowLeft size={14}/> Applicants</Link>
+    {loading ? <div className="surface skeleton" style={{ height: 220 }}/> : error || !profile ? <ErrorState message={error || 'Candidate profile could not be loaded.'} retry={reload}/> : <section className="surface" data-testid="page-candidate-profile" style={{ padding: 'clamp(20px,4vw,32px)', display: 'grid', gap: 15 }}><PageTitle kicker="Applicant profile" title={profile.headline || 'Candidate profile'} subtitle={profile.location || 'Location not provided'}/><div><div className="eyebrow">Skills</div><p>{profile.skills.length ? profile.skills.join(', ') : 'Not provided'}</p></div><div><div className="eyebrow">Experience</div><p style={{ whiteSpace: 'pre-wrap' }}>{profile.experience || 'Not provided'}</p></div><div><div className="eyebrow">Education</div><p>{profile.education || 'Not provided'}</p></div></section>}
   </div>;
 }
 function NotificationsPage() {
@@ -575,6 +617,8 @@ function RoutedPages() {
     <Route path="/applications" component={() => <ProtectedPage role="candidate"><ApplicationsPage/></ProtectedPage>}/>
     <Route path="/profile" component={() => <ProtectedPage role="candidate"><ProfilePage/></ProtectedPage>}/>
     <Route path="/employer" component={() => <ProtectedPage role="company"><EmployerPage/></ProtectedPage>}/>
+    <Route path="/employer/applications" component={() => <ProtectedPage role="company"><EmployerApplicationsPage/></ProtectedPage>}/>
+    <Route path="/employer/applications/:applicationId/candidate-profile" component={() => <ProtectedPage role="company"><ApplicantProfilePage/></ProtectedPage>}/>
     <Route path="/employer/jobs" component={() => <ProtectedPage role="company"><EmployerJobsPage/></ProtectedPage>}/>
     <Route path="/employer/jobs/new" component={() => <ProtectedPage role="company"><JobEditorPage/></ProtectedPage>}/>
     <Route path="/employer/jobs/:id/applicants" component={() => <ProtectedPage role="company"><ApplicantsPage/></ProtectedPage>}/>

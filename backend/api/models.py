@@ -127,6 +127,19 @@ class Notification:
 
 
 @dataclass(frozen=True)
+class ActivityEvent:
+    id: str
+    event_type: str
+    occurred_at: Any
+    actor_user_id: str | None = None
+    actor_role: str = "guest"
+    subject_type: str | None = None
+    subject_id: str | None = None
+    application_method: str = "none"
+    origin: str = "live"
+
+
+@dataclass(frozen=True)
 class HealthStatus:
     status: str
     service: str

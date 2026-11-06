@@ -2,10 +2,10 @@
 
 import os
 from contextvars import ContextVar, Token
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
 from django.utils import timezone
-from .models import Application, Company, Job, Membership, Notification, User
+from .models import ActivityEvent, Application, Company, Job, Membership, Notification, User
 from django.contrib.auth.hashers import make_password
 
 
@@ -22,9 +22,54 @@ class InMemoryStore:
     saved_jobs: dict[str, set[str]]
     memberships: list[Membership]
     notifications: list[Notification]
+    activity_events: list[ActivityEvent] = field(default_factory=list)
+
+
+def _demo_observability_seed_enabled() -> bool:
+    environment = os.getenv("STEADWORK_ENVIRONMENT", "development").strip().lower()
+    enabled = os.getenv("STEADWORK_SEED_OBSERVABILITY_DATA", "false").strip().lower()
+    return environment in {"development", "local"} and enabled in {"1", "true", "yes", "on"}
+
+
+def _demo_activity_events(now):
+    """Synthetic local history that makes business activity charts useful on first start."""
+    if not _demo_observability_seed_enabled():
+        return []
+
+    def event(event_id, event_type, hours_ago, actor_id, role, subject_type=None,
+              subject_id=None, application_method="none"):
+        return ActivityEvent(
+            id=f"demo-v1-{event_id}",
+            event_type=event_type,
+            occurred_at=now - timedelta(hours=hours_ago),
+            actor_user_id=actor_id,
+            actor_role=role,
+            subject_type=subject_type,
+            subject_id=subject_id,
+            application_method=application_method,
+            origin="demo",
+        )
+
+    return [
+        event("register-candidate", "user_registered", 18, "user-candidate", "candidate", "user", "user-candidate"),
+        event("register-recruiter", "user_registered", 120, "user-recruiter", "recruiter", "user", "user-recruiter"),
+        event("register-admin", "user_registered", 144, "user-admin", "admin", "user", "user-admin"),
+        event("login-candidate", "login_succeeded", 2, "user-candidate", "candidate", "user", "user-candidate"),
+        event("login-recruiter", "login_succeeded", 72, "user-recruiter", "recruiter", "user", "user-recruiter"),
+        event("login-admin", "login_succeeded", 144, "user-admin", "admin", "user", "user-admin"),
+        event("publish-platform", "job_published", 7, "user-recruiter", "recruiter", "job", "job-platform"),
+        event("publish-design", "job_published", 96, "user-recruiter", "recruiter", "job", "job-design"),
+        event("submit-application", "application_submitted", 12, "user-candidate", "candidate", "application", "application-1"),
+        event("withdraw-application", "application_withdrawn", 21, "user-candidate", "candidate", "application", "demo-application-withdrawn"),
+        event("reject-application", "application_rejected", 22, "user-recruiter", "recruiter", "application", "demo-application-rejected"),
+        event("external-apply", "external_apply_clicked", 5, "user-candidate", "candidate", "job", "job-design", "external"),
+        event("unsave-job", "job_unsaved", 9, "user-candidate", "candidate", "job", "job-security"),
+        event("save-job", "job_saved", 4, "user-candidate", "candidate", "job", "job-security"),
+    ]
 
 
 def _seed() -> InMemoryStore:
+    now = timezone.now()
     return InMemoryStore(
         users=[
             User("user-candidate", "candidate@example.com", "candidate", make_password("candidate-password"), "Demo Candidate"),
@@ -72,15 +117,20 @@ def _seed() -> InMemoryStore:
         ],
         applications=[] if os.getenv("STEADWORK_TEST_CLEAN_APPLICATIONS") == "1" else [
             Application("application-1", "job-platform", "user-candidate", "Applied",
-                        "Candidate", "candidate@example.com", "candidate.pdf", "", timezone.now())
+                        "Candidate", "candidate@example.com", "candidate.pdf", "", now - timedelta(hours=12))
         ],
         profiles={},
-        saved_jobs={},
+        saved_jobs=(
+            {"user-candidate": {"job-security"}}
+            if _demo_observability_seed_enabled()
+            else {}
+        ),
         memberships=[
             Membership("user-recruiter", "company-acme", "recruiter"),
             Membership("user-admin", "company-acme", "admin"),
         ],
         notifications=[],
+        activity_events=_demo_activity_events(now),
     )
 
 

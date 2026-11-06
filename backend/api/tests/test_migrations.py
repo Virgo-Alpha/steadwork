@@ -36,7 +36,8 @@ def test_fresh_database_upgrade_matches_all_model_tables_and_constraints(tmp_pat
         tables = set(inspect(engine).get_table_names())
         assert {
             "users", "companies", "jobs", "applications", "candidate_profiles",
-            "saved_jobs", "company_memberships", "notifications", "alembic_version",
+            "saved_jobs", "company_memberships", "notifications", "activity_events",
+            "alembic_version",
         } <= tables
     finally:
         engine.dispose()

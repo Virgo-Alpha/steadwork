@@ -15,7 +15,9 @@ ENV PYTHONUNBUFFERED=1 \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_PROJECT_ENVIRONMENT=/opt/steadwork-venv \
-    STEADWORK_FRONTEND_DIR=/opt/steadwork/frontend
+    STEADWORK_FRONTEND_DIR=/opt/steadwork/frontend \
+    DJANGO_SETTINGS_MODULE=steadwork.settings \
+    OTEL_SDK_DISABLED=true
 
 WORKDIR /app/backend
 COPY backend/pyproject.toml backend/uv.lock ./
@@ -32,4 +34,4 @@ ENV PORT=10000
 EXPOSE 10000
 # The API currently keeps bearer token sessions in process memory. Use one
 # worker so login and authenticated requests see the same token store.
-CMD ["sh", "-c", "uv run --no-sync alembic upgrade head && exec uv run --no-sync gunicorn steadwork.wsgi:application --bind 0.0.0.0:${PORT:-10000} --workers 1 --access-logfile - --error-logfile -"]
+CMD ["sh", "-c", "uv run --no-sync alembic upgrade head && exec uv run --no-sync opentelemetry-instrument gunicorn steadwork.wsgi:application --bind 0.0.0.0:${PORT:-10000} --workers 1 --access-logfile - --error-logfile -"]

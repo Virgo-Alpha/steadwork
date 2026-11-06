@@ -1,4 +1,4 @@
-import type { AccountRegistration, Application, ApplicationInput, ApplicationStatus, CandidateProfile, Company, EmployerDashboard, Job, JobFilters, JobStatus, LoginInput, Notification, User } from '../domain/types';
+import type { AccountRegistration, Application, ApplicationInput, ApplicationStatus, CandidateProfile, Company, EmployerApplication, EmployerCandidateProfile, EmployerDashboard, Job, JobFilters, JobStatus, LoginInput, Notification, User } from '../domain/types';
 
 export interface JobBoardService {
   listJobs(filters?: JobFilters): Promise<Job[]>;
@@ -25,6 +25,8 @@ export interface JobBoardService {
   updateJob(id: string, input: Partial<Job>): Promise<Job>;
   setJobStatus(id: string, status: JobStatus): Promise<Job>;
   listApplicants(jobId: string): Promise<Application[]>;
+  listEmployerApplications(): Promise<EmployerApplication[]>;
+  getApplicantProfile(applicationId: string): Promise<EmployerCandidateProfile>;
   updateApplicationStatus(id: string, status: ApplicationStatus): Promise<Application>;
   listNotifications(): Promise<Notification[]>;
   markNotificationRead(id: string): Promise<void>;

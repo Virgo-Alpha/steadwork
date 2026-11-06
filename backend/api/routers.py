@@ -13,6 +13,7 @@ from dataclasses import replace
 
 from .models import Application, Company, Job, Membership, Notification, User
 from .store import application_status, get_store
+from .telemetry import record_business_event, track_user_action
 
 
 _JOB_FILTERS = {"keyword", "location", "jobType", "remotePolicy", "experienceLevel", "companyId", "salaryMin", "skills", "postedWithin", "sort"}
@@ -97,12 +98,14 @@ def health(request):
 
 
 @api_view(["POST"])
+@track_user_action("login")
 def login(request):
     if not isinstance(request.data, dict):
         return _bad("Request body must be a JSON object.")
     user = authenticate(request.data.get("email", ""), request.data.get("password", ""))
     if not user:
         return Response({"detail": "Invalid credentials."}, status=status.HTTP_401_UNAUTHORIZED)
+    record_business_event("login_succeeded", actor_user_id=user.id, actor_role=user.role)
     return Response({"access_token": issue_token(user), "token_type": "Bearer", "user": user.to_dict()})
 
 
@@ -124,6 +127,7 @@ def logout(request):
 
 
 @api_view(["POST"])
+@track_user_action("register", status_outcomes={409: "duplicate_email"})
 def register(request):
     if not isinstance(request.data, dict):
         return _bad("Request body must be a JSON object.")
@@ -160,6 +164,7 @@ def register(request):
         company = Company(uuid4().hex, company_name.strip())
         store.companies.append(company)
         store.memberships.append(Membership(user.id, company.id, "recruiter"))
+    record_business_event("user_registered", actor_user_id=user.id, actor_role=user.role)
     return Response({"access_token": issue_token(user), "token_type": "Bearer", "user": user.to_dict()}, status=201)
 
 
@@ -334,6 +339,11 @@ def saved_jobs(request):
         return _bad("jobId is required.")
     if not next((job for job in store.jobs if job.id == job_id), None):
         return Response({"detail": "Job not found."}, status=404)
+    if job_id not in saved:
+        record_business_event(
+            "job_saved", actor_user_id=user.id, actor_role=user.role,
+            subject_type="job", subject_id=job_id,
+        )
     saved.add(job_id)
     return Response(status=204)
 
@@ -347,6 +357,10 @@ def unsave_job(request, job_id):
     if job_id not in saved:
         return Response({"detail": "Saved job not found."}, status=404)
     saved.remove(job_id)
+    record_business_event(
+        "job_unsaved", actor_user_id=user.id, actor_role=user.role,
+        subject_type="job", subject_id=job_id,
+    )
     return Response(status=204)
 
 
@@ -380,6 +394,7 @@ def _eligible_job(job_id):
 
 
 @api_view(["POST"])
+@track_user_action("submit_application", status_outcomes={409: "already_applied"})
 def create_application(request):
     user, error = _candidate(request)
     if error:
@@ -405,6 +420,17 @@ def create_application(request):
                       values["candidateEmail"].strip(), values["cvName"], values["coverLetter"], datetime.now(dt_timezone.utc))
     get_store().applications.append(app)
     job.application_count += 1
+    record_business_event(
+        "application_submitted", actor_user_id=user.id, actor_role=user.role,
+        subject_type="application", subject_id=app.id,
+        application_method=job.application_method.lower(),
+    )
+    if job.application_method == "External":
+        record_business_event(
+            "external_apply_clicked", actor_user_id=user.id, actor_role=user.role,
+            subject_type="application", subject_id=app.id,
+            application_method="external",
+        )
     if app.status != "External click":
         for member in get_store().memberships:
             if member.company_id == job.company_id:
@@ -413,6 +439,7 @@ def create_application(request):
 
 
 @api_view(["POST"])
+@track_user_action("submit_application", status_outcomes={409: "already_applied"})
 def create_guest_application(request):
     values, error = _application_input(request.data)
     if error:
@@ -430,6 +457,15 @@ def create_guest_application(request):
                       email, values["cvName"], values["coverLetter"], datetime.now(dt_timezone.utc))
     get_store().applications.append(app)
     job.application_count += 1
+    record_business_event(
+        "application_submitted", actor_role="guest", subject_type="application",
+        subject_id=app.id, application_method=job.application_method.lower(),
+    )
+    if job.application_method == "External":
+        record_business_event(
+            "external_apply_clicked", actor_role="guest", subject_type="application",
+            subject_id=app.id, application_method="external",
+        )
     if app.status != "External click":
         for member in get_store().memberships:
             if member.company_id == job.company_id:
@@ -438,6 +474,7 @@ def create_guest_application(request):
 
 
 @api_view(["POST"])
+@track_user_action("withdraw_application")
 def withdraw_application(request, application_id):
     user, error = _candidate(request)
     if error:
@@ -453,6 +490,10 @@ def withdraw_application(request, application_id):
     index = applications.index(app)
     app = replace(app, status="Withdrawn")
     applications[index] = app
+    record_business_event(
+        "application_withdrawn", actor_user_id=user.id, actor_role=user.role,
+        subject_type="application", subject_id=app.id,
+    )
     return Response(app.to_dict())
 
 
@@ -475,6 +516,7 @@ def employer_dashboard(request):
 
 
 @api_view(["GET", "POST"])
+@track_user_action("create_job", when=lambda request, *_args, **_kwargs: request.method == "POST")
 def employer_jobs(request):
     employer, error = _employer(request)
     if error:
@@ -511,6 +553,7 @@ def employer_job(request, job_id):
 
 
 @api_view(["POST"])
+@track_user_action("job_status")
 def employer_job_status(request, job_id):
     employer, error = _employer(request)
     if error:
@@ -534,6 +577,11 @@ def employer_job_status(request, job_id):
         return _bad("Invalid job status transition.")
     index = get_store().jobs.index(job)
     get_store().jobs[index] = replace(job, status=target, posted_at=(now if target == "Published" else job.posted_at))
+    if target == "Published":
+        record_business_event(
+            "job_published", actor_user_id=employer[0].id, actor_role=employer[0].role,
+            subject_type="job", subject_id=job.id,
+        )
     return Response(get_store().jobs[index].to_dict())
 
 
@@ -549,7 +597,34 @@ def employer_applications(request, job_id):
     return Response([app.to_dict() for app in get_store().applications if app.job_id == job.id])
 
 
+@api_view(["GET"])
+def employer_all_applications(request):
+    employer, error = _employer(request)
+    if error:
+        return error
+    _, membership = employer
+    jobs = {job.id: job for job in get_store().jobs if job.company_id == membership.company_id}
+    applications = [app for app in get_store().applications if app.job_id in jobs]
+    applications.sort(key=lambda app: _utc(app.created_at).timestamp() if app.created_at else 0, reverse=True)
+    return Response([{**app.to_dict(), "jobTitle": jobs[app.job_id].title} for app in applications])
+
+
+@api_view(["GET"])
+def employer_candidate_profile(request, application_id):
+    employer, error = _employer(request)
+    if error:
+        return error
+    _, membership = employer
+    app = next((item for item in get_store().applications if item.id == application_id), None)
+    if app is None or _company_job(app.job_id, membership.company_id) is None or not app.candidate_id:
+        return Response({"detail": "Candidate profile not found."}, status=404)
+    profile = get_store().profiles.get(app.candidate_id, {})
+    fields = ("headline", "location", "skills", "experience", "education")
+    return Response({"userId": app.candidate_id, **{key: profile.get(key, [] if key == "skills" else "") for key in fields}})
+
+
 @api_view(["POST"])
+@track_user_action("review_application")
 def employer_application_status(request, application_id):
     employer, error = _employer(request)
     if error:
@@ -560,11 +635,15 @@ def employer_application_status(request, application_id):
     if app is None or job is None:
         return Response({"detail": "Application not found."}, status=404)
     target = request.data.get("status")
-    allowed = {"Applied": {"Under Review"}, "Under Review": {"Shortlisted", "Rejected"}, "Shortlisted": {"Hired", "Rejected"}}
-    if target not in allowed.get(app.status, set()):
-        return _bad("Invalid application status transition.")
+    if target not in {"Applied", "Under Review", "Shortlisted", "Rejected", "Hired", "Withdrawn", "External click"}:
+        return _bad("Invalid application status.")
     updated = replace(app, status=target)
     get_store().applications[get_store().applications.index(app)] = updated
+    if target == "Rejected" and app.status != "Rejected":
+        record_business_event(
+            "application_rejected", actor_user_id=employer[0].id, actor_role=employer[0].role,
+            subject_type="application", subject_id=app.id,
+        )
     if updated.candidate_id:
         _company_notification(updated.candidate_id, "Application status updated", f"Your application for {job.title} is now {target}.")
     return Response(updated.to_dict())

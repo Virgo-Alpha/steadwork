@@ -2,6 +2,7 @@ import pytest
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from api.models import Application
 from api.store import get_store, reset_store
 
 
@@ -128,14 +129,56 @@ def test_application_status_and_notifications_are_scoped():
     app_id = get_store().applications[0].id
     updated = recruiter.post(f"/api/employer/applications/{app_id}/status/", {"status": "Under Review"}, format="json")
     assert updated.status_code == 200
-    assert recruiter.post(f"/api/employer/applications/{app_id}/status/", {"status": "Hired"}, format="json").status_code == 400
+    assert recruiter.post(f"/api/employer/applications/{app_id}/status/", {"status": "Hired"}, format="json").status_code == 200
     candidate_notifications = candidate.get("/api/notifications/")
     assert candidate_notifications.status_code == 200
-    assert len(candidate_notifications.json()) == 1
+    assert len(candidate_notifications.json()) == 2
     notification_id = candidate_notifications.json()[0]["id"]
     assert candidate.post(f"/api/notifications/{notification_id}/read/", format="json").status_code == 204
     assert candidate.post(f"/api/notifications/{notification_id}/read/", format="json").status_code == 204
     assert recruiter.post(f"/api/notifications/{notification_id}/read/", format="json").status_code == 404
+
+
+def test_employer_applicant_list_is_company_scoped_and_includes_job_title():
+    recruiter = logged_in()
+    candidate = logged_in("candidate@example.com", "candidate-password")
+    store = get_store()
+    store.applications.append(Application(
+        "other-company-application", "job-design", "user-candidate", "Applied",
+        "Candidate", "candidate@example.com", "design.pdf", "", timezone.now(),
+    ))
+
+    response = recruiter.get("/api/employer/applications/")
+    assert response.status_code == 200
+    assert response.json() == [{
+        **store.applications[0].to_dict(), "jobTitle": "Platform Engineer",
+    }]
+    assert candidate.get("/api/employer/applications/").status_code == 403
+    admin = logged_in("admin@example.com", "admin-password")
+    assert admin.get("/api/employer/applications/").status_code == 200
+
+
+def test_employer_can_view_only_profile_for_applicant_to_owned_job():
+    recruiter = logged_in()
+    candidate = logged_in("candidate@example.com", "candidate-password")
+    candidate.patch("/api/candidate/profile/", {
+        "headline": "Backend developer", "location": "Mauritius", "skills": ["Python"],
+        "preferences": "Private job search preferences",
+    }, format="json")
+
+    response = recruiter.get("/api/employer/applications/application-1/candidate-profile/")
+    assert response.status_code == 200
+    assert response.json() == {
+        "userId": "user-candidate", "headline": "Backend developer",
+        "location": "Mauritius", "skills": ["Python"], "experience": "", "education": "",
+    }
+    guest = candidate.post("/api/applications/guest/", {
+        "jobId": "job-platform", "candidateName": "Guest", "candidateEmail": "guest@example.com",
+        "cvName": "guest.pdf", "coverLetter": "",
+    }, format="json")
+    guest_profile = recruiter.get(f"/api/employer/applications/{guest.json()['id']}/candidate-profile/")
+    assert guest_profile.status_code == 404
+    assert recruiter.get("/api/employer/applications/other-company-application/candidate-profile/").status_code == 404
 
 
 def test_shortlisted_application_can_be_rejected():
@@ -146,6 +189,16 @@ def test_shortlisted_application_can_be_rejected():
     rejected = recruiter.post(f"/api/employer/applications/{app_id}/status/", {"status": "Rejected"}, format="json")
     assert rejected.status_code == 200
     assert rejected.json()["status"] == "Rejected"
+
+
+def test_application_status_can_be_set_to_any_known_status():
+    recruiter = logged_in()
+    app_id = get_store().applications[0].id
+    for target in ("Hired", "Withdrawn", "External click", "Applied"):
+        response = recruiter.post(f"/api/employer/applications/{app_id}/status/", {"status": target}, format="json")
+        assert response.status_code == 200
+        assert response.json()["status"] == target
+    assert recruiter.post(f"/api/employer/applications/{app_id}/status/", {"status": "Something else"}, format="json").status_code == 400
 
 
 def test_non_member_cannot_use_employer_api():

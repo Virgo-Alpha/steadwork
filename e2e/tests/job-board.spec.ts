@@ -150,6 +150,7 @@ test('visitor, candidate, and recruiter complete an application flow in isolated
     await expect(applicant).toBeVisible();
     const statusResponse = waitForApi(recruiter, `employer/applications/${application.id}/status/`, 'POST');
     await applicant.getByLabel('Update status for E2E Candidate').selectOption('Under Review');
+    await applicant.getByTestId(`button-save-applicant-status-${application.id}`).click();
     expect((await statusResponse).status(), 'recruiter status API response').toBe(200);
     await expect(applicant).toContainText('Under Review');
 

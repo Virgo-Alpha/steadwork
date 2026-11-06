@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 
 from api.middleware import _database
 from api.database import get_database_url
-from api.orm import ApplicationRecord, JobRecord
+from api.orm import ActivityEventRecord, ApplicationRecord, JobRecord
 from api.repositories import Repository
 from api.tests.migration_helpers import upgrade_database
 
@@ -59,6 +59,24 @@ def application_body(email, job_id="job-design"):
         "cvName": "integration.pdf",
         "coverLetter": "Interested in this role.",
     }
+
+
+def test_successful_login_activity_is_durably_stored(sqlite_api):
+    client, _database_path, database_url = sqlite_api
+    assert client.post(
+        "/api/auth/login/",
+        {"email": "candidate@example.com", "password": "candidate-password"},
+        format="json",
+    ).status_code == 200
+
+    engine, session_factory = _database(database_url)
+    with session_factory() as session:
+        events = session.scalars(
+            select(ActivityEventRecord).where(ActivityEventRecord.event_type == "login_succeeded")
+        ).all()
+        assert len(events) == 1
+        assert events[0].actor_user_id == "user-candidate"
+        assert events[0].occurred_at is not None
 
 
 def test_sqlite_http_state_survives_new_request_sessions_and_is_isolated(sqlite_api):

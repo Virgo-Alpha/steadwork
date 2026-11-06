@@ -245,10 +245,74 @@ describe('frontend journeys over the live API and Vite proxy', () => {
     await act(async () => { window.dispatchEvent(new PopStateEvent('popstate')); });
     await waitFor(() => Boolean(document.querySelector('[data-testid^="row-applicant-"]')));
     const status = document.querySelector<HTMLSelectElement>('[data-testid^="select-applicant-status-"]')!;
-    status.value = 'Under Review';
+    status.value = 'Hired';
     await act(async () => { status.dispatchEvent(new Event('change', { bubbles: true })); });
-    await waitFor(() => document.body.textContent?.includes('marked Under Review') ?? false);
+    const applicationId = status.dataset.testid!.replace('select-applicant-status-', '');
+    expect(document.querySelector(`[data-testid="button-save-applicant-status-${applicationId}"]`)).not.toBeNull();
+    await click(document.querySelector(`[data-testid="button-save-applicant-status-${applicationId}"]`)!);
+    await waitFor(() => document.body.textContent?.includes('marked Hired') ?? false);
+    const storedApps = await fetch('/api/employer/jobs/job-platform/applications/', {
+      headers: { Authorization: `Bearer ${window.sessionStorage.getItem(ACCESS_TOKEN_KEY)}` },
+    }).then(response => response.json());
+    expect(storedApps.find((application: { id: string }) => application.id === applicationId).status).toBe('Hired');
     expect(window.sessionStorage.getItem(ACCESS_TOKEN_KEY)).toBeTruthy();
+  }, 30_000);
+
+  it('shows candidate navigation only to candidates and protects candidate-only routes', async () => {
+    await login('recruiter@example.com', 'recruiter-password');
+    await waitFor(() => Boolean(document.querySelector('[data-testid="nav-employer-applications"]')));
+    for (const testId of ['nav-saved', 'nav-applications', 'nav-my-profile']) {
+      expect(document.querySelector(`[data-testid="${testId}"]`)).toBeNull();
+    }
+    await login('admin@example.com', 'admin-password');
+    await waitFor(() => Boolean(document.querySelector('[data-testid="nav-employer-applications"]')));
+    window.history.pushState({}, '', '/applications');
+    await act(async () => { window.dispatchEvent(new PopStateEvent('popstate')); });
+    await waitFor(() => document.body.textContent?.includes('This area is for candidate accounts.') ?? false);
+  }, 30_000);
+
+  it('lists applicants across the employer roles and links registered applicants to a safe profile', async () => {
+    await login('recruiter@example.com', 'recruiter-password');
+    const employerToken = window.sessionStorage.getItem(ACCESS_TOKEN_KEY)!;
+    const createRole = await fetch('/api/employer/jobs/', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${employerToken}` },
+      body: JSON.stringify({ title: 'Second Acme role', description: 'More work', location: 'Remote', deadline: new Date(Date.now() + 86_400_000).toISOString() }),
+    });
+    expect(createRole.status).toBe(201);
+    const role = await createRole.json();
+    expect((await fetch(`/api/employer/jobs/${role.id}/status/`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${employerToken}` },
+      body: JSON.stringify({ status: 'Published' }),
+    })).status).toBe(200);
+
+    await login('candidate@example.com', 'candidate-password');
+    const candidateToken = window.sessionStorage.getItem(ACCESS_TOKEN_KEY)!;
+    await fetch('/api/candidate/profile/', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${candidateToken}` },
+      body: JSON.stringify({ headline: 'Backend engineer', location: 'Mauritius', skills: ['Python'], preferences: 'Private preferences' }),
+    });
+    const apply = (jobId: string, cvName: string) => fetch('/api/applications/', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${candidateToken}` },
+      body: JSON.stringify({ jobId, candidateName: 'Demo Candidate', candidateEmail: 'candidate@example.com', cvName, coverLetter: 'Interested in the role.' }),
+    });
+    expect((await apply('job-platform', 'backend-resume.pdf')).status).toBe(201);
+    expect((await apply(role.id, 'second-resume.pdf')).status).toBe(201);
+
+    await login('recruiter@example.com', 'recruiter-password');
+    window.history.pushState({}, '', '/employer/applications');
+    await act(async () => { window.dispatchEvent(new PopStateEvent('popstate')); });
+    await waitFor(() => Boolean(document.querySelector('[data-testid^="row-employer-application-"]')));
+    const rows = [...document.querySelectorAll('[data-testid^="row-employer-application-"]')];
+    expect(rows).toHaveLength(2);
+    expect(rows.map(row => row.textContent).join(' ')).toContain('Platform Engineer');
+    expect(rows.map(row => row.textContent).join(' ')).toContain('Second Acme role');
+    expect(rows.map(row => row.textContent).join(' ')).toContain('backend-resume.pdf');
+
+    const profileLink = document.querySelector<HTMLAnchorElement>('[data-testid^="link-applicant-profile-"]')!;
+    await click(profileLink);
+    await waitFor(() => Boolean(document.querySelector('[data-testid="page-candidate-profile"]')));
+    expect(document.body.textContent).toContain('Backend engineer');
+    expect(document.body.textContent).not.toContain('Private preferences');
   }, 30_000);
 
   it('creates a role with comma-separated details and a current-or-future apply-by date', async () => {
@@ -258,7 +322,9 @@ describe('frontend journeys over the live API and Vite proxy', () => {
     await waitFor(() => Boolean(document.querySelector('[data-testid="input-job-title"]')));
 
     const deadline = document.querySelector<HTMLInputElement>('[data-testid="input-job-deadline"]')!;
-    const today = new Date().toISOString().slice(0, 10);
+    const localToday = new Date();
+    localToday.setMinutes(localToday.getMinutes() - localToday.getTimezoneOffset());
+    const today = localToday.toISOString().slice(0, 10);
     expect(deadline.min).toBe(today);
     expect(deadline.value >= today).toBe(true);
 
@@ -279,5 +345,6 @@ describe('frontend journeys over the live API and Vite proxy', () => {
     expect(created.responsibilities).toEqual(['Build systems', 'review code']);
     expect(created.qualifications).toEqual(['TypeScript', 'React']);
     expect(created.benefits).toEqual(['Health cover', 'flexible leave']);
+    await waitFor(() => Boolean(document.querySelector(`[data-testid="row-employer-job-${created.id}"]`)));
   }, 30_000);
 });
