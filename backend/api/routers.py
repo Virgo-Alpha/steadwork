@@ -269,7 +269,14 @@ def _job_values(data, partial=True):
             return None, _bad(f"Invalid {key}.")
     if "deadline" in values:
         try:
-            values["deadline"] = _utc(values["deadline"])
+            raw_deadline = values["deadline"]
+            parsed_deadline = _utc(raw_deadline)
+            now = datetime.now(dt_timezone.utc)
+            if parsed_deadline.date() < now.date():
+                return None, _bad("Deadline must be today or later.")
+            if isinstance(raw_deadline, str) and len(raw_deadline) == 10:
+                parsed_deadline = parsed_deadline.replace(hour=23, minute=59, second=59, microsecond=999999)
+            values["deadline"] = parsed_deadline
         except (TypeError, ValueError):
             return None, _bad("Invalid deadline.")
     return values, None

@@ -250,4 +250,34 @@ describe('frontend journeys over the live API and Vite proxy', () => {
     await waitFor(() => document.body.textContent?.includes('marked Under Review') ?? false);
     expect(window.sessionStorage.getItem(ACCESS_TOKEN_KEY)).toBeTruthy();
   }, 30_000);
+
+  it('creates a role with comma-separated details and a current-or-future apply-by date', async () => {
+    await login('recruiter@example.com', 'recruiter-password');
+    window.history.pushState({}, '', '/employer/jobs/new');
+    await act(async () => { window.dispatchEvent(new PopStateEvent('popstate')); });
+    await waitFor(() => Boolean(document.querySelector('[data-testid="input-job-title"]')));
+
+    const deadline = document.querySelector<HTMLInputElement>('[data-testid="input-job-deadline"]')!;
+    const today = new Date().toISOString().slice(0, 10);
+    expect(deadline.min).toBe(today);
+    expect(deadline.value >= today).toBe(true);
+
+    input('input-job-title', 'Integration Engineer');
+    input('input-job-description', 'Build useful software.');
+    input('input-job-location', 'Remote');
+    input('input-job-responsibilities', 'Build systems, review code');
+    input('input-job-qualifications', 'TypeScript, React');
+    input('input-job-benefits', 'Health cover, flexible leave');
+    expect((document.querySelector('[data-testid="input-job-responsibilities"]') as HTMLTextAreaElement).value).toBe('Build systems, review code');
+    await submit(document.querySelector('form')!);
+    await waitFor(() => document.querySelector('[data-testid="status-job-save"]')?.textContent?.includes('Role saved') ?? false);
+
+    const jobs = await fetch('/api/employer/jobs/', {
+      headers: { Authorization: `Bearer ${window.sessionStorage.getItem(ACCESS_TOKEN_KEY)}` },
+    }).then(response => response.json());
+    const created = jobs.find((job: { title: string }) => job.title === 'Integration Engineer');
+    expect(created.responsibilities).toEqual(['Build systems', 'review code']);
+    expect(created.qualifications).toEqual(['TypeScript', 'React']);
+    expect(created.benefits).toEqual(['Health cover', 'flexible leave']);
+  }, 30_000);
 });

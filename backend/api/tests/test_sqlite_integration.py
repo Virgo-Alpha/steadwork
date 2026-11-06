@@ -162,7 +162,7 @@ def test_sqlite_foreign_key_failure_rolls_back_and_later_http_request_works(sqli
 
 
 def test_sqlite_http_lifecycle_ownership_and_role_failures(sqlite_api):
-    client, _database_path, _database_url = sqlite_api
+    client, _database_path, database_url = sqlite_api
     assert client.get("/api/jobs/").status_code == 200
 
     anonymous = APIClient()
@@ -229,8 +229,19 @@ def test_sqlite_http_lifecycle_ownership_and_role_failures(sqlite_api):
     assert recruiter.post(
         f"/api/employer/jobs/{expired_id}/status/", {"status": "Published"}, format="json"
     ).status_code == 200
+    past_deadline = (timezone.now() - timezone.timedelta(days=1)).isoformat()
     assert recruiter.patch(
-        f"/api/employer/jobs/{expired_id}/", {"deadline": (timezone.now() - timezone.timedelta(days=1)).isoformat()}, format="json"
+        f"/api/employer/jobs/{expired_id}/", {"deadline": past_deadline}, format="json"
+    ).status_code == 400
+
+    # Simulate time passing after publication; API writes correctly reject
+    # past deadlines, so move the stored deadline to exercise expiration.
+    _engine, session_factory = _database(database_url)
+    with session_factory() as session:
+        session.get(JobRecord, expired_id).deadline = timezone.now() - timezone.timedelta(days=1)
+        session.commit()
+    assert recruiter.post(
+        f"/api/employer/jobs/{expired_id}/status/", {"status": "Expired"}, format="json"
     ).status_code == 200
     expired_application = candidate.post(
         "/api/applications/",
