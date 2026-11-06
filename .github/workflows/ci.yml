@@ -83,7 +83,7 @@ jobs:
 
   full-validation:
     name: Full validation and Compose E2E
-    # Playwright 1.55.1 does not provide Chromium builds for Ubuntu 26.04;
+    # Playwright 1.55.1 does not provide Chromium builds for Ubuntu 26.04
     # keep the browser job on a supported, stable runner image.
     runs-on: ubuntu-24.04
     needs: [frontend-tests, backend-tests]
