@@ -7,6 +7,7 @@ import os
 import shlex
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -55,13 +56,16 @@ class CommandProvider:
 
     def __init__(self, command: str | None = None, name: str | None = None, model: str | None = None):
         raw_command = command if command is not None else os.environ.get("ONCALL_AGENT_COMMAND", "")
-        if not raw_command.strip():
-            raise ProviderError(
-                "Set ONCALL_AGENT_COMMAND to a provider adapter implementing the JSON contract."
-            )
+        default_adapter = not raw_command.strip()
+        if default_adapter:
+            adapter = Path(__file__).with_name("adapters") / "codex.py"
+            self.argv = [sys.executable, str(adapter)]
+        else:
+            self.argv = []
         try:
-            parsed = json.loads(raw_command)
-            self.argv = parsed if isinstance(parsed, list) else shlex.split(raw_command)
+            if not default_adapter:
+                parsed = json.loads(raw_command)
+                self.argv = parsed if isinstance(parsed, list) else shlex.split(raw_command)
         except json.JSONDecodeError:
             self.argv = shlex.split(raw_command)
         if not self.argv or not all(isinstance(part, str) for part in self.argv):
@@ -70,8 +74,10 @@ class CommandProvider:
         if not executable:
             raise ProviderError(f"Agent adapter executable was not found: {self.argv[0]}")
         self.argv[0] = executable
-        self.name = name or os.environ.get("ONCALL_AGENT_PROVIDER", "custom")
-        self.model = model or os.environ.get("ONCALL_AGENT_MODEL", "unspecified")
+        default_name = "codex" if default_adapter else "custom"
+        default_model = "codex-default" if default_adapter else "unspecified"
+        self.name = name or os.environ.get("ONCALL_AGENT_PROVIDER", default_name)
+        self.model = model or os.environ.get("ONCALL_AGENT_MODEL", default_model)
 
     def investigate(
         self, incident: dict[str, Any], workspace: Path, run_dir: Path, timeout: int
@@ -119,8 +125,12 @@ def safe_provider_environment(incident_path: Path, workspace: Path, run_dir: Pat
             "ONCALL_INCIDENT_JSON": str(incident_path),
             "ONCALL_WORKSPACE": str(workspace),
             "ONCALL_RESULT_SCHEMA": str(run_dir / "result-schema.json"),
-            "ONCALL_AGENT_PROVIDER": os.environ.get("ONCALL_AGENT_PROVIDER", "custom"),
-            "ONCALL_AGENT_MODEL": os.environ.get("ONCALL_AGENT_MODEL", "unspecified"),
+            "ONCALL_AGENT_PROVIDER": os.environ.get(
+                "ONCALL_AGENT_PROVIDER", "codex" if not os.environ.get("ONCALL_AGENT_COMMAND") else "custom"
+            ),
+            "ONCALL_AGENT_MODEL": os.environ.get(
+                "ONCALL_AGENT_MODEL", "codex-default" if not os.environ.get("ONCALL_AGENT_COMMAND") else "unspecified"
+            ),
             "GIT_TERMINAL_PROMPT": "0",
             "GIT_CONFIG_GLOBAL": os.devnull,
             "GIT_CONFIG_SYSTEM": os.devnull,

@@ -489,8 +489,12 @@ def run_incident(alert: dict[str, Any], audit: AuditLog, *, test_mode: bool = Fa
     remote = source_remote()
     test_mode = test_mode_remote(remote, enabled=test_mode)
     policy_allowed, policy_reason = authorization(alert)
-    provider_name = os.environ.get("ONCALL_AGENT_PROVIDER", "custom")
-    model = os.environ.get("ONCALL_AGENT_MODEL", "unspecified")
+    provider_name = os.environ.get(
+        "ONCALL_AGENT_PROVIDER", "codex" if not os.environ.get("ONCALL_AGENT_COMMAND") else "custom"
+    )
+    model = os.environ.get(
+        "ONCALL_AGENT_MODEL", "codex-default" if not os.environ.get("ONCALL_AGENT_COMMAND") else "unspecified"
+    )
     common = audit_context(alert, run_id, provider_name, model)
     audit.append({**common, "phase": "alert_observed", "run_dir": str(run_dir)})
 

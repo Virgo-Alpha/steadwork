@@ -1,6 +1,6 @@
 # Local Grafana on-call runner
 
-The runner polls Grafana's built-in Alertmanager API every minute, deduplicates by fingerprint, and captures the alert, recent commits, Prometheus metrics, Loki events, and linked Tempo traces. It invokes a configured provider adapter through a provider-neutral JSON contract. A verified low-risk backend fix is independently tested, committed on an alert-specific local branch, fast-forwarded into `main`, and pushed to `origin`. The runner then waits for the `CI` workflow's development deployment, checks the development health endpoint, and waits for the alert and action-error signal to clear. Production promotion remains manual.
+The runner polls Grafana's built-in Alertmanager API every minute, deduplicates by fingerprint, and captures the alert, recent commits, Prometheus metrics, Loki events, and linked Tempo traces. By default it starts the bundled headless Codex CLI adapter through a provider-neutral JSON contract. Set `ONCALL_AGENT_COMMAND` to override it with another adapter. A verified low-risk backend fix is independently tested, committed on an alert-specific local branch, fast-forwarded into `main`, and pushed to `origin`. The runner then waits for the `CI` workflow's development deployment, checks the development health endpoint, and waits for the alert and action-error signal to clear. Production promotion remains manual.
 
 Automatic fixes are allowlisted to **Repeated application submission failures** in `local` or `development`. The local duplicate-registration smoke alert is triage-only. Fixes are limited to `backend/api/`, five files, and 300 changed lines. Auth, data model, database, migrations, infrastructure, deployment, CI, observability, and on-call automation changes escalate. A fix must include a reproduction and telemetry evidence and pass `cd backend && uv run pytest -q` before the runner creates its commit.
 
@@ -10,16 +10,24 @@ Verify the local audit chain with `python3 on-call-engineer/poll.py --verify-aud
 
 ## Provider adapter contract
 
-The poller does not invoke a specific coding-agent CLI. Configure `ONCALL_AGENT_COMMAND` as a JSON argv array or simple command. The adapter:
+The poller defaults to [adapters/codex.py](adapters/codex.py), which runs `codex exec` non-interactively with ephemeral session storage, a workspace-write sandbox, and the runner's result schema. It replaces itself with the Codex process so the runner's timeout and output capture apply to that process. Codex CLI must be installed on `PATH` and authenticated locally (for example with `codex login`). Its default configured model is used unless `ONCALL_AGENT_MODEL` is set. See the [Codex CLI non-interactive mode documentation](https://learn.chatgpt.com/docs/non-interactive-mode).
+
+To use a different agent, set `ONCALL_AGENT_COMMAND` as a JSON argv array or simple command. Any adapter, including the bundled Codex one, must:
 
 1. Reads the complete incident packet from the path in `ONCALL_INCIDENT_JSON` and may read the response schema in `ONCALL_RESULT_SCHEMA`.
 2. Uses `ONCALL_WORKSPACE` as its only writable repository checkout.
 3. Receives the incident prompt on stdin and writes exactly one JSON result to stdout: `decision` (`fix`, `false_positive`, or `escalate`), `summary`, `evidence_ids`, `reproduction`, and `risk`.
 4. Does not commit or push. The runner validates scope and evidence, tests, commits, merges, and pushes.
 
-Provider credentials are passed only when explicitly named in `ONCALL_AGENT_ENV_ALLOWLIST`. GitHub, Grafana, cloud, and database credentials are removed from the agent environment. The adapter must run the selected provider in a sandbox limited to the incident checkout; provider-specific sandbox setup belongs in that adapter.
+The bundled adapter uses the Codex CLI's saved local authentication, so no provider API-key environment variable is required when that login is available. If using `CODEX_API_KEY` or a custom provider credential, name it explicitly in `ONCALL_AGENT_ENV_ALLOWLIST`; secrets are otherwise removed from the agent environment. GitHub, Grafana, cloud, and database credentials are never passed to the coding process. The bundled Codex adapter limits writes to the incident checkout with Codex's `workspace-write` sandbox. Custom adapters are responsible for providing an equivalent workspace-limited sandbox.
 
-Example configuration for a local wrapper:
+Optional configuration to pin the Codex model and label it in the audit:
+
+```sh
+export ONCALL_AGENT_MODEL='<codex-model-id>'
+```
+
+To override the default with a custom adapter:
 
 ```sh
 export ONCALL_AGENT_PROVIDER=my-provider
@@ -33,7 +41,7 @@ See [agent-prompt.md](agent-prompt.md), [result.schema.json](result.schema.json)
 ## Requirements
 
 - Start the local observability stack with `make run` or `make compose-up`; Grafana credentials are read from `observability/.env`.
-- Configure and authenticate a provider adapter using the contract above.
+- Install the Codex CLI and authenticate it locally, or configure a custom adapter using the contract above.
 - Install `uv` and the backend test dependencies.
 - Configure local Git credentials that can push directly to `main`, and ensure repository branch rules allow that identity to push. The runner uses a fast-forward only merge and never force-pushes.
 - Install and authenticate GitHub CLI (`gh`) so the runner can verify the CI/development deployment after pushing.
@@ -67,9 +75,9 @@ Starting continuous polling enables autonomous code changes and pushes to `main`
 | `GRAFANA_USER` | `admin` | Grafana username |
 | `GRAFANA_PASSWORD` | `observability/.env` value | Override the password file |
 | `PROMETHEUS_URL` | `http://127.0.0.1:9090` | Prometheus query API |
-| `ONCALL_AGENT_COMMAND` | unset | Provider adapter command; required to investigate alerts |
-| `ONCALL_AGENT_PROVIDER` | `custom` | Audit label for the configured adapter |
-| `ONCALL_AGENT_MODEL` | `unspecified` | Audit label for the selected model |
+| `ONCALL_AGENT_COMMAND` | bundled Codex adapter | Optional command override for another provider adapter |
+| `ONCALL_AGENT_PROVIDER` | `codex` | Audit label for the configured adapter |
+| `ONCALL_AGENT_MODEL` | `codex-default` | Optional Codex model selection and audit label; otherwise Codex CLI chooses its configured default |
 | `ONCALL_AGENT_ENV_ALLOWLIST` | empty | Comma-separated provider credential variables passed to the adapter |
 | `ONCALL_MAIN_BRANCH` | `main` | Branch the runner clones, fast-forward merges, and pushes |
 | `ONCALL_DEVELOPMENT_HEALTH_URL` | development `/api/health/` URL | Post-deployment health probe |

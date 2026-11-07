@@ -6,33 +6,27 @@ This test uses the real configured headless provider and local Grafana. It injec
 
 The CI workflow runs only for pushes to `main`; a push to `oncall-agent-manual-test` runs neither CI nor the development deployment. The existing runner can target this branch with `ONCALL_MAIN_BRANCH`, but it still waits for a CI run and development deployment after pushing. Since neither occurs on this branch, it will wait up to an hour and then record an escalation. After the audit records `code_pushed`, stop the poller with Ctrl+C. This leaves a clear audit record and the fix commit on the test branch, but no `recovery_confirmed` record. You will verify local recovery yourself after pulling the fix. This test therefore demonstrates alert wake-up, investigation, correction, backend tests, and branch push; it does not test the runner's automated deployment/recovery completion.
 
-## Provider adapter is required
+## Default headless Codex adapter
 
-The poller does not include a provider-specific coding-agent adapter. An alert can be observed and its evidence collected without one, but the run will immediately escalate with `Set ONCALL_AGENT_COMMAND to a provider adapter implementing the JSON contract.` It will not launch an agent or make a fix. The adapter must invoke your chosen coding agent in headless mode and implement the contract in [README.md](README.md) and [result.schema.json](result.schema.json).
+The poller uses the bundled [Codex adapter](adapters/codex.py) when `ONCALL_AGENT_COMMAND` is unset. It starts a separate headless `codex exec` process for each alert, sandboxed to write in the incident checkout, and requests the runner's structured result format. This is a new CLI run, not the currently open Codex chat session. The Codex CLI must be installed on `PATH` and authenticated on this computer; if needed, sign in once with `codex login`. The adapter uses that saved CLI login, so you do not need to set a provider command, provider/model labels, API key, or environment allowlist for the default setup. Codex chooses its configured default model.
 
-If you already have an adapter, do not add another file: set `ONCALL_AGENT_COMMAND` to its command. If you do not, add a provider-specific wrapper at `on-call-engineer/adapters/<provider>-adapter.py`; that wrapper must read the prompt from stdin and incident data from `ONCALL_INCIDENT_JSON`, use `ONCALL_WORKSPACE` as its writable checkout, and print exactly one JSON object with `decision`, `summary`, `evidence_ids`, `reproduction`, and `risk`. The agent itself must not commit or push; the runner does that. Do not put provider credentials in repository files.
-
-Set these variables in the same terminal that starts the poller. Replace the example path and names with your adapter and provider's actual values:
+Before starting the poller, confirm that the CLI is available:
 
 ```sh
-# Optional: audit label for the adapter; defaults to "custom".
-export ONCALL_AGENT_PROVIDER='<provider-id>'
-# Optional: audit label for the model; defaults to "unspecified".
-export ONCALL_AGENT_MODEL='<model-id>'
-# Required: command for a headless adapter implementing the JSON contract.
-export ONCALL_AGENT_COMMAND='["python3","/absolute/path/to/provider-adapter.py"]'
-# Optional: exact environment-variable name for a provider credential the adapter needs.
-export ONCALL_AGENT_ENV_ALLOWLIST='<PROVIDER_API_KEY_VARIABLE>'
-# Optional: omit both credential lines if the provider CLI is already authenticated locally.
-# Replace PROVIDER_API_KEY_VARIABLE in both lines with the provider's actual variable name.
-export PROVIDER_API_KEY_VARIABLE='<provider-api-key>'
+command -v codex
 ```
 
-`ONCALL_AGENT_ENV_ALLOWLIST` must contain the exact environment-variable name holding the provider credential. Only explicitly allowlisted variables are passed to the adapter. If your provider needs no API-key environment variable, omit the last two exports.
+Optional: pin a Codex model. This also records the selected model in the audit:
+
+```sh
+export ONCALL_AGENT_MODEL='<codex-model-id>'
+```
+
+To use another provider, set `ONCALL_AGENT_COMMAND` to an adapter implementing the [provider contract](README.md#provider-adapter-contract). Provider credentials are passed only when explicitly named in `ONCALL_AGENT_ENV_ALLOWLIST`. Do not put credentials in repository files.
 
 ### Retry after the missing-adapter escalation
 
-The previous run is recorded as `escalated` for the alert fingerprint in `on-call-engineer/state/manual-test/runner-state.json`. While that fingerprint remains active, the poller deduplicates it and will not retry it from the same state directory. Stop the old poller, configure `ONCALL_AGENT_COMMAND` and its provider settings, then use a new state directory. This preserves the previous audit rather than deleting it. The alert must still be **Firing**; if it has resolved, send the three fault-triggering curl requests again and wait for it to fire.
+The previous run is recorded as `escalated` for the alert fingerprint in `on-call-engineer/state/manual-test/runner-state.json`. While that fingerprint remains active, the poller deduplicates it and will not retry it from the same state directory. Stop the old poller, make sure the Codex CLI is installed and signed in, then use a new state directory. This preserves the previous audit rather than deleting it. The alert must still be **Firing**; if it has resolved, send the three fault-triggering curl requests again and wait for it to fire.
 
 ## 1. Create the test branch
 
@@ -78,7 +72,7 @@ make run
 
 ## 3. Start the poller on the test branch
 
-After configuring and authenticating the adapter above, use another terminal at the repository root and run:
+After installing and authenticating the Codex CLI, use another terminal at the repository root and run:
 
 ```sh
 export ONCALL_MAIN_BRANCH=oncall-agent-manual-test
@@ -86,11 +80,7 @@ export ONCALL_STATE_DIR="$PWD/on-call-engineer/state/manual-test-retry-1"
 python3 on-call-engineer/poll.py
 ```
 
-`ONCALL_MAIN_BRANCH` tells the existing runner which branch to clone and push. Use a different `ONCALL_STATE_DIR` name for each retry. Check that the adapter variable is present without displaying its value:
-
-```sh
-test -n "$ONCALL_AGENT_COMMAND" && echo 'Provider adapter configured' || echo 'ERROR: ONCALL_AGENT_COMMAND is missing'
-```
+`ONCALL_MAIN_BRANCH` tells the existing runner which branch to clone and push. Use a different `ONCALL_STATE_DIR` name for each retry. No `ONCALL_AGENT_COMMAND` export is needed for the bundled Codex adapter. If Codex is missing or unauthenticated, the run will record an escalation; inspect that run's `agent.stderr` and audit events for the startup error.
 
 The poller checks Grafana once a minute. Keep this terminal open.
 

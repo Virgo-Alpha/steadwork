@@ -114,7 +114,7 @@ Further instructions on how to prove that the alerts work are documented in `_do
 
 ## On-call Agent
 
-The local on-call engineer polls Grafana alerts, wakes a configured headless coding agent, investigates with metrics, logs, and traces, tests bounded backend fixes, and pushes them to the configured branch. Normal operation targets `main`, where CI deploys development; production promotion remains manual. For a safe manual acceptance test on a separate branch, including the expected runner CI/deployment-wait limitation and evidence to inspect, follow the [on-call agent test guide](on-call-engineer/manual-test.md).
+The local on-call engineer polls Grafana alerts, wakes the bundled headless Codex CLI adapter by default, investigates with metrics, logs, and traces, tests bounded backend fixes, and pushes them to the configured branch. Normal operation targets `main`, where CI deploys development; production promotion remains manual. Install and sign in to the Codex CLI before running the poller; no provider command or API-key export is needed for the default adapter. For a safe manual acceptance test on a separate branch, including setup, evidence to inspect, and the expected runner CI/deployment-wait limitation, follow the [on-call agent test guide](on-call-engineer/manual-test.md).
 
 ## Further component guides
 
