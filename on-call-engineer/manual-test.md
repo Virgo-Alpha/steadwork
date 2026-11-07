@@ -16,6 +16,12 @@ Before starting the poller, confirm that the CLI is available:
 command -v codex
 ```
 
+If you previously exported a placeholder or custom `ONCALL_AGENT_COMMAND`, clear it in the poller's terminal so the bundled Codex default is selected:
+
+```sh
+unset ONCALL_AGENT_COMMAND
+```
+
 Optional: pin a Codex model. This also records the selected model in the audit:
 
 ```sh
