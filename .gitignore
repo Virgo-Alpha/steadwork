@@ -60,6 +60,9 @@ Thumbs.db
 .local/
 backend/.local-data/
 
+# Local autonomous on-call workspaces, state, credentials, and agent logs.
+/on-call-engineer/state/
+
 # Local PostgreSQL Compose credentials
 /.env
 

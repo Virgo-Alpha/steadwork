@@ -1,0 +1,18 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["decision", "summary", "evidence_ids", "reproduction", "risk"],
+  "properties": {
+    "decision": {
+      "type": "string",
+      "enum": ["fix", "false_positive", "escalate"]
+    },
+    "summary": {"type": "string", "minLength": 1},
+    "evidence_ids": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "reproduction": {"type": "string"},
+    "risk": {"type": "string", "enum": ["low", "medium", "high"]}
+  }
+}

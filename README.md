@@ -101,7 +101,6 @@ The backend exports OpenTelemetry request and business activity metrics, traces 
 The deployed Render service is not currently configured to export telemetry. A Grafana Cloud OTLP connection is documented as a follow-up assessment in the guide.
 
 ### Alerting on User Impact
-## 5. Test the local alert
 
 There are two provisioned rules under **Alerting → Alert rules** in Grafana UI:
 
@@ -114,8 +113,8 @@ Further instructions on how to prove that the alerts work are documented in `_do
 
 
 ## On-call Agent
-TODO: Add an agent wakes up on an alert and fixes the issue.
-TODO: Document the agent on observability_and_monitoring.md
+
+The local on-call engineer polls Grafana alerts, wakes a configured headless coding agent, investigates with metrics, logs, and traces, tests bounded backend fixes, and pushes them to the configured branch. Normal operation targets `main`, where CI deploys development; production promotion remains manual. For a safe manual acceptance test on a separate branch, including the expected runner CI/deployment-wait limitation and evidence to inspect, follow the [on-call agent test guide](on-call-engineer/manual-test.md).
 
 ## Further component guides
 

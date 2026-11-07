@@ -35,6 +35,7 @@ groups:
           version: "{{ $labels.service_version }}"
           owner: steadwork-maintainers
           dashboard: http://localhost:3000/d/steadwork-overview/steadwork-overview?var-environment={{ $labels.deployment_environment_name }}
+          runbook_url: https://github.com/Virgo-Alpha/steadwork/blob/main/on-call-engineer/runbooks/application-submission-failures.md
         labels:
           severity: warning
           owner: steadwork-maintainers
