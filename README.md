@@ -100,6 +100,19 @@ The backend exports OpenTelemetry request and business activity metrics, traces 
 
 The deployed Render service is not currently configured to export telemetry. A Grafana Cloud OTLP connection is documented as a follow-up assessment in the guide.
 
+### Alerting on User Impact
+## 5. Test the local alert
+
+There are two provisioned rules under **Alerting → Alert rules** in Grafana UI:
+
+- **Repeated application submission failures** is the operational rule. It fires when at least three server-side submission failures occur in ten minutes and remain present for five minutes.
+- **Local smoke test - duplicate registrations** is a test-only rule. It is paused initially so expected duplicate-email behavior does not create a permanent alert.
+
+<img width="922" height="957" alt="Screenshot from 2026-11-07 16-14-17" src="https://github.com/user-attachments/assets/684aa2c6-0515-4214-b618-f458e132feb0" />
+
+Further instructions on how to prove that the alerts work are documented in `_docs/observability.md` under the `Test the local alert` heading
+
+
 ## On-call Agent
 TODO: Add an agent wakes up on an alert and fixes the issue.
 TODO: Document the agent on observability_and_monitoring.md

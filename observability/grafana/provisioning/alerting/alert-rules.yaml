@@ -60,7 +60,7 @@ groups:
         noDataState: OK
         execErrState: Error
         for: 0s
-        isPaused: false
+        isPaused: true
         annotations:
           summary: Local smoke test alert for duplicate registration attempts
           description: This test-only rule verifies alert evaluation. Pause it again after the local check.

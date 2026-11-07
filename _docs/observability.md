@@ -95,7 +95,7 @@ Wait a few seconds for the metric export interval, then:
 
 <img width="933" height="957" alt="Screenshot from 2026-11-07 15-44-38" src="https://github.com/user-attachments/assets/ee1b5a74-b0c0-462e-8612-52b4fc131bbe" />
 
-4. From the selected span, use **Logs for this span** to open Loki filtered to that trace and span ID. From the Loki record, use **Open trace** to return to the full Tempo trace, then select the same span ID again. Grafana's built-in Loki derived-field link opens a trace, not a span-specific selection; the span ID is logged and used to filter logs for the selected span, but Grafana does not preserve the span selection when navigating back from Loki.
+4. From the selected span, use **Logs for this span** to open Loki filtered to that trace and span ID. To return to Tempo, expand the matching Loki log row (click the row or its expand caret) and look in the log details for the derived-field link labeled **Open trace**. Click that link to open the full Tempo trace, then select the same span ID again. The link appears in the expanded log details, not as a link on the collapsed row. If it is missing, confirm the log line contains `trace_id=<32 lowercase hex characters>`, that Loki's **TraceID** derived field is provisioned in the Loki data source, and restart Grafana after changing its provisioning file. Grafana's built-in Loki derived-field link opens a trace, not a span-specific selection; the span ID is logged and used to filter logs for the selected span, but Grafana does not preserve the span selection when navigating back from Loki.
 
 <img width="1858" height="957" alt="Screenshot from 2026-11-07 15-57-42" src="https://github.com/user-attachments/assets/af45e60f-7038-4df6-bd17-21078cc03631" />
 
