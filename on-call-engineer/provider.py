@@ -131,6 +131,7 @@ def safe_provider_environment(incident_path: Path, workspace: Path, run_dir: Pat
             "ONCALL_AGENT_MODEL": os.environ.get(
                 "ONCALL_AGENT_MODEL", "codex-default" if not os.environ.get("ONCALL_AGENT_COMMAND") else "unspecified"
             ),
+            "ONCALL_CODEX_SANDBOX": os.environ.get("ONCALL_CODEX_SANDBOX", "workspace-write"),
             "GIT_TERMINAL_PROMPT": "0",
             "GIT_CONFIG_GLOBAL": os.devnull,
             "GIT_CONFIG_SYSTEM": os.devnull,

@@ -26,15 +26,25 @@ def main() -> int:
 
     # Codex replaces this process so the runner's timeout and captured stdout/stderr
     # apply directly to the agent process. The runner owns all Git commits and pushes.
+    sandbox = os.environ.get("ONCALL_CODEX_SANDBOX", "workspace-write")
+    if sandbox not in {"workspace-write", "danger-full-access"}:
+        print(
+            "ONCALL_CODEX_SANDBOX must be 'workspace-write' or 'danger-full-access'.",
+            file=sys.stderr,
+        )
+        return 2
+
     argv = [
         codex,
         "exec",
         "--ephemeral",
         "--sandbox",
-        "workspace-write",
+        sandbox,
         "--output-schema",
         str(schema.resolve()),
     ]
+    if sandbox == "danger-full-access":
+        argv.extend(["--ask-for-approval", "never"])
     model = os.environ.get("ONCALL_AGENT_MODEL", "")
     if model and model not in {"unspecified", "codex-default"}:
         argv.extend(["--model", model])

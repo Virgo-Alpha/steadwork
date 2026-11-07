@@ -8,12 +8,30 @@ The CI workflow runs only for pushes to `main`; a push to `oncall-agent-manual-t
 
 ## Default headless Codex adapter
 
-The poller uses the bundled [Codex adapter](adapters/codex.py) when `ONCALL_AGENT_COMMAND` is unset. It starts a separate headless `codex exec` process for each alert, sandboxed to write in the incident checkout, and requests the runner's structured result format. This is a new CLI run, not the currently open Codex chat session. The Codex CLI must be installed on `PATH` and authenticated on this computer; if needed, sign in once with `codex login`. The adapter uses that saved CLI login, so you do not need to set a provider command, provider/model labels, API key, or environment allowlist for the default setup. Codex chooses its configured default model.
+The poller uses the bundled [Codex adapter](adapters/codex.py) when `ONCALL_AGENT_COMMAND` is unset. It starts a separate headless `codex exec` process for each alert and requests the runner's structured result format. By default, Codex can write within the incident checkout using the `workspace-write` sandbox. This is a new CLI run, not the currently open Codex chat session. The Codex CLI must be installed on `PATH` and authenticated on this computer; if needed, sign in once with `codex login`. The adapter uses that saved CLI login, so you do not need to set a provider command, provider/model labels, API key, or environment allowlist for the default setup. Codex chooses its configured default model.
 
 Before starting the poller, confirm that the CLI is available:
 
 ```sh
 command -v codex
+```
+
+### Linux hosts that block user namespaces
+
+Codex's Linux `workspace-write` sandbox uses Bubblewrap. If `unshare -Ur true` fails with `Operation not permitted`, this host blocks the user namespaces Bubblewrap needs; the agent will escalate without changing code. The preferred solution is to run the test in a disposable VM or Linux environment that permits the sandbox.
+
+For this local acceptance test only, you can opt into Codex's unrestricted mode by exporting this in the same terminal that starts the poller:
+
+```sh
+export ONCALL_CODEX_SANDBOX=danger-full-access
+```
+
+This disables Codex's filesystem and network sandbox and sets approval handling to `never`, so the unattended run will not pause for permission prompts. The agent can access files, credentials, and network available to your operating-system account. A test Git branch does not isolate your computer. Use a disposable OS account or VM if possible, and do not leave this mode enabled after testing. Codex documents `danger-full-access` for controlled environments only: [CLI non-interactive mode](https://learn.chatgpt.com/docs/non-interactive-mode).
+
+When the manual test is finished, return to the default sandbox in that terminal:
+
+```sh
+unset ONCALL_CODEX_SANDBOX
 ```
 
 If you previously exported a placeholder or custom `ONCALL_AGENT_COMMAND`, clear it in the poller's terminal so the bundled Codex default is selected:
@@ -82,7 +100,7 @@ After installing and authenticating the Codex CLI, use another terminal at the r
 
 ```sh
 export ONCALL_MAIN_BRANCH=oncall-agent-manual-test
-export ONCALL_STATE_DIR="$PWD/on-call-engineer/state/manual-test-retry-1"
+export ONCALL_STATE_DIR="$PWD/on-call-engineer/state/manual-test-retry-3"
 python3 on-call-engineer/poll.py
 ```
 
