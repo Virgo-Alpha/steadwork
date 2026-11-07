@@ -74,7 +74,7 @@ done
 
 Each request should return HTTP 500 and produce a `submit_application` / `server_error` telemetry event.
 
-<img width="1521" height="735" alt="Screenshot from 2026-11-07 22-41-52" src="https://github.com/user-attachments/assets/0f90a931-16f3-463f-b529-5b5447a70a4f" />
+<img width="1521" height="735" alt="Screenshot from 2026-11-07 22-45-47" src="https://github.com/user-attachments/assets/d8dab00f-40c1-4462-b812-f09afe09c022" />
 
 ## 5. Observe the agent working
 
@@ -87,8 +87,6 @@ In a third terminal, follow the audit trail:
 ```sh
 tail -F on-call-engineer/state/manual-test/audit.jsonl
 ```
-
-<img width="1521" height="735" alt="Screenshot from 2026-11-07 22-45-47" src="https://github.com/user-attachments/assets/d8dab00f-40c1-4462-b812-f09afe09c022" />
 
 The evidence that the agent woke and investigated is the sequence `alert_observed`, `context_collected`, `investigation_started`, and `investigation_completed`, including the alert fingerprint and cited telemetry. The run directory recorded in the audit contains `incident.json`, `agent.stdout`, `agent.stderr`, and `backend-tests.log`. The final test evidence is a `code_pushed` record containing the commit SHA and `test_result: passed`; the fix commit should appear on `oncall-agent-manual-test` in GitHub.
 
