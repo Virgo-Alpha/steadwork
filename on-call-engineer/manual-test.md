@@ -108,6 +108,8 @@ python3 on-call-engineer/poll.py
 
 The poller checks Grafana once a minute. Keep this terminal open.
 
+<img width="1329" height="294" alt="Screenshot from 2026-11-07 23-59-07" src="https://github.com/user-attachments/assets/eaaede5f-be32-43dc-9193-3e766119cede" />
+
 ## 4. Trigger the operational alert with curl
 
 Submit three guest applications with distinct test emails. `job-platform` is included in the local demo data:
@@ -122,6 +124,8 @@ done
 
 Each request should return HTTP 500 and produce a `submit_application` / `server_error` telemetry event.
 
+<img width="1521" height="735" alt="Screenshot from 2026-11-07 22-45-47" src="https://github.com/user-attachments/assets/d8dab00f-40c1-4462-b812-f09afe09c022" />
+
 ## 5. Observe the agent working
 
 In Grafana, open **Alerting → Alert rules → Repeated application submission failures**. The alert requires at least three failures in ten minutes and a five-minute firing period, with one-minute rule evaluation. Wait for **Pending** to become **Firing**. The poller should notice it within its next one-minute poll.
@@ -134,7 +138,7 @@ In a third terminal, follow the audit trail:
 tail -F on-call-engineer/state/manual-test-retry-1/audit.jsonl
 ```
 
-<img width="1856" height="629" alt="Screenshot from 2026-11-07 22-08-51" src="https://github.com/user-attachments/assets/be3b32ba-7272-4b5b-aef4-402ba397ef38" />
+<img width="1859" height="731" alt="Screenshot from 2026-11-08 00-00-30" src="https://github.com/user-attachments/assets/8e508b74-6db6-46eb-8d72-3b769a695fc0" />
 
 The evidence that the agent woke and investigated is the sequence `alert_observed`, `context_collected`, `investigation_started`, and `investigation_completed`, including the alert fingerprint and cited telemetry. The run directory recorded in the audit contains `incident.json`, `agent.stdout`, `agent.stderr`, and `backend-tests.log`. The final test evidence is a `code_pushed` record containing the commit SHA and `test_result: passed`; the fix commit should appear on `oncall-agent-manual-test` in GitHub.
 
