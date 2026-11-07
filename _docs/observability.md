@@ -119,8 +119,17 @@ To prove the alert path works, update the provisioned rule file rather than usin
    docker compose --project-name steadwork-observability --env-file observability/.env --file observability/compose.yaml restart grafana
    ```
 
-3. Submit the same registration address enough times to produce at least three duplicate attempts within five minutes. Wait for the one-minute evaluation; the rule should enter **Firing**.
-4. To pause the rule again, change `isPaused: false` back to `isPaused: true` in the same file and repeat the Grafana restart command.
+3. Submit the same registration address enough times to produce at least three duplicate attempts within five minutes.
+```sh
+curl -i http://127.0.0.1:8000/api/auth/register/ \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"otel-demo@example.test","password":"Local-test-password-42","name":"Demo","role":"candidate"}'
+```
+
+4. Wait for the one-minute evaluation; the rule should enter **Firing**:
+<img width="922" height="957" alt="Screenshot from 2026-11-07 16-48-11" src="https://github.com/user-attachments/assets/75199c6b-ad1c-4be5-ba3e-50ea9519adc2" />
+
+5. To pause the rule again, change `isPaused: false` back to `isPaused: true` in the same file and repeat the Grafana restart command.
 
 This verifies rule evaluation; no notification contact point is configured by default. To receive email or another notification, configure a contact point and notification policy in **Alerting**. The provisioned alert rule is managed by this file, so UI edits are not the source of truth.
 
