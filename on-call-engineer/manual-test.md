@@ -60,6 +60,8 @@ python3 on-call-engineer/poll.py
 
 `ONCALL_MAIN_BRANCH` tells the existing runner which branch to clone and push. The dedicated state directory avoids suppressing this alert because of a previous run's deduplication record. The provider runs headlessly through its configured adapter. The poller checks Grafana once a minute. Keep this terminal open.
 
+<img width="1329" height="294" alt="Screenshot from 2026-11-07 23-59-07" src="https://github.com/user-attachments/assets/eaaede5f-be32-43dc-9193-3e766119cede" />
+
 ## 4. Trigger the operational alert with curl
 
 Submit three guest applications with distinct test emails. `job-platform` is included in the local demo data:
@@ -87,6 +89,8 @@ In a third terminal, follow the audit trail:
 ```sh
 tail -F on-call-engineer/state/manual-test/audit.jsonl
 ```
+
+<img width="1859" height="731" alt="Screenshot from 2026-11-08 00-00-30" src="https://github.com/user-attachments/assets/8e508b74-6db6-46eb-8d72-3b769a695fc0" />
 
 The evidence that the agent woke and investigated is the sequence `alert_observed`, `context_collected`, `investigation_started`, and `investigation_completed`, including the alert fingerprint and cited telemetry. The run directory recorded in the audit contains `incident.json`, `agent.stdout`, `agent.stderr`, and `backend-tests.log`. The final test evidence is a `code_pushed` record containing the commit SHA and `test_result: passed`; the fix commit should appear on `oncall-agent-manual-test` in GitHub.
 
