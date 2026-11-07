@@ -12,7 +12,7 @@ Verify the local audit chain with `python3 on-call-engineer/poll.py --verify-aud
 
 The poller defaults to [adapters/codex.py](adapters/codex.py), which runs `codex exec` non-interactively with ephemeral session storage, a workspace-write sandbox, and the runner's result schema. It replaces itself with the Codex process so the runner's timeout and output capture apply to that process. Codex CLI must be installed on `PATH` and authenticated locally (for example with `codex login`). Its default configured model is used unless `ONCALL_AGENT_MODEL` is set. See the [Codex CLI non-interactive mode documentation](https://learn.chatgpt.com/docs/non-interactive-mode).
 
-`ONCALL_CODEX_SANDBOX` defaults to `workspace-write`. Setting it to `danger-full-access` runs Codex without the filesystem and network sandbox and disables approval prompts for that run. Use this only in a disposable environment for a deliberate local test; the agent can access files, credentials, and network available to the operating-system account. Codex documents this mode as suitable only for a controlled environment.
+`ONCALL_CODEX_SANDBOX` defaults to `workspace-write`. Setting it to `danger-full-access` runs Codex without the filesystem and network sandbox. The adapter uses non-interactive `codex exec` and does not pass an approval flag. Use full access only in a disposable environment for a deliberate local test; the agent can access files, credentials, and network available to the operating-system account. Codex documents this mode as suitable only for a controlled environment.
 
 To use a different agent, set `ONCALL_AGENT_COMMAND` as a JSON argv array or simple command. Any adapter, including the bundled Codex one, must:
 
@@ -80,7 +80,7 @@ Starting continuous polling enables autonomous code changes and pushes to `main`
 | `ONCALL_AGENT_COMMAND` | bundled Codex adapter | Optional command override for another provider adapter |
 | `ONCALL_AGENT_PROVIDER` | `codex` | Audit label for the configured adapter |
 | `ONCALL_AGENT_MODEL` | `codex-default` | Optional Codex model selection and audit label; otherwise Codex CLI chooses its configured default |
-| `ONCALL_CODEX_SANDBOX` | `workspace-write` | Codex sandbox mode; `danger-full-access` disables sandboxing and approval prompts |
+| `ONCALL_CODEX_SANDBOX` | `workspace-write` | Codex sandbox mode; `danger-full-access` removes filesystem and network restrictions |
 | `ONCALL_AGENT_ENV_ALLOWLIST` | empty | Comma-separated provider credential variables passed to the adapter |
 | `ONCALL_MAIN_BRANCH` | `main` | Branch the runner clones, fast-forward merges, and pushes |
 | `ONCALL_DEVELOPMENT_HEALTH_URL` | development `/api/health/` URL | Post-deployment health probe |

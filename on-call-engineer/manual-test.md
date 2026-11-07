@@ -26,7 +26,7 @@ For this local acceptance test only, you can opt into Codex's unrestricted mode 
 export ONCALL_CODEX_SANDBOX=danger-full-access
 ```
 
-This disables Codex's filesystem and network sandbox and sets approval handling to `never`, so the unattended run will not pause for permission prompts. The agent can access files, credentials, and network available to your operating-system account. A test Git branch does not isolate your computer. Use a disposable OS account or VM if possible, and do not leave this mode enabled after testing. Codex documents `danger-full-access` for controlled environments only: [CLI non-interactive mode](https://learn.chatgpt.com/docs/non-interactive-mode).
+This disables Codex's filesystem and network sandbox. The adapter invokes non-interactive `codex exec` without an approval flag, so the run does not pause for permission prompts. The agent can access files, credentials, and network available to your operating-system account. A test Git branch does not isolate your computer. Use a disposable OS account or VM if possible, and do not leave this mode enabled after testing. Codex documents `danger-full-access` for controlled environments only: [CLI non-interactive mode](https://learn.chatgpt.com/docs/non-interactive-mode).
 
 When the manual test is finished, return to the default sandbox in that terminal:
 

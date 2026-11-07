@@ -43,8 +43,6 @@ def main() -> int:
         "--output-schema",
         str(schema.resolve()),
     ]
-    if sandbox == "danger-full-access":
-        argv.extend(["--ask-for-approval", "never"])
     model = os.environ.get("ONCALL_AGENT_MODEL", "")
     if model and model not in {"unspecified", "codex-default"}:
         argv.extend(["--model", model])
