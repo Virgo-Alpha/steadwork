@@ -15,10 +15,16 @@ If you already have an adapter, do not add another file: set `ONCALL_AGENT_COMMA
 Set these variables in the same terminal that starts the poller. Replace the example path and names with your adapter and provider's actual values:
 
 ```sh
+# Optional: audit label for the adapter; defaults to "custom".
 export ONCALL_AGENT_PROVIDER='<provider-id>'
+# Optional: audit label for the model; defaults to "unspecified".
 export ONCALL_AGENT_MODEL='<model-id>'
+# Required: command for a headless adapter implementing the JSON contract.
 export ONCALL_AGENT_COMMAND='["python3","/absolute/path/to/provider-adapter.py"]'
+# Optional: exact environment-variable name for a provider credential the adapter needs.
 export ONCALL_AGENT_ENV_ALLOWLIST='<PROVIDER_API_KEY_VARIABLE>'
+# Optional: omit both credential lines if the provider CLI is already authenticated locally.
+# Replace PROVIDER_API_KEY_VARIABLE in both lines with the provider's actual variable name.
 export PROVIDER_API_KEY_VARIABLE='<provider-api-key>'
 ```
 
