@@ -51,7 +51,7 @@ Open [Grafana](http://127.0.0.1:3000). The Steadwork service overview is configu
 To inspect each signal directly, choose **Explore** and select:
 
 - **Prometheus** for RED metrics: request **Rate**, **Errors**, and **Duration**. For example, run `sum(rate(http_server_duration_milliseconds_count{service_name="steadwork-api",deployment_environment_name="development"}[5m]))` for request rate, or `sum(rate(http_server_duration_milliseconds_count{service_name="steadwork-api",deployment_environment_name="development",http_status_code=~"5.."}[5m]))` for server errors.
-- **Loki** for application logs. Search `{service_name="steadwork-api"}`. Action logs contain an `action`, an `outcome`, and `trace_id`; do not expect email addresses, resumes, or other user data in telemetry.
+- **Loki** for application logs. Search `{service_name="steadwork-api"}`. Action logs contain an `action`, an `outcome`, `trace_id`, and `span_id`; do not expect email addresses, resumes, or other user data in telemetry.
 - **Tempo** for traces and spans. Search by service name `steadwork-api`, or paste a trace ID found in a Loki log. A trace is the end-to-end request; spans show its individual operations.
 
 <img width="826" height="551" alt="Screenshot from 2026-11-07 15-03-49" src="https://github.com/user-attachments/assets/880e7183-0c87-49d6-87d2-134bef4867f1" />
@@ -87,19 +87,19 @@ Wait a few seconds for the metric export interval, then:
 
 <img width="933" height="911" alt="Screenshot from 2026-11-07 15-40-33" src="https://github.com/user-attachments/assets/5d7cf326-4c6d-4955-b3a5-1de86dcff74d" />
 
-2. In **Explore → Loki**, search `{service_name="steadwork-api"} |= "duplicate_email"`. Open a matching log line and copy its 32-character `trace_id`.
+2. In **Explore → Loki**, search `{service_name="steadwork-api"} |= "duplicate_email"`. Open a matching log line and note its 32-character `trace_id` and 16-character `span_id`.
 
 <img width="933" height="928" alt="Screenshot from 2026-11-07 15-42-35" src="https://github.com/user-attachments/assets/0d679a02-24ac-4bcd-853e-e27cf92cc666" />
 
-3. In **Explore → Tempo**, search for service `steadwork-api` or paste that trace ID. Open the trace and inspect its request spans.
+3. In **Explore → Tempo**, search for service `steadwork-api` or paste that trace ID. Open the trace and select the span whose ID matches the log's `span_id`.
 
 <img width="933" height="957" alt="Screenshot from 2026-11-07 15-44-38" src="https://github.com/user-attachments/assets/ee1b5a74-b0c0-462e-8612-52b4fc131bbe" />
 
-4. From the trace details, use **Logs for this span** to open the Loki records carrying the same trace ID. From the Loki record, use its trace link to return to the Tempo trace. This checks both directions of trace-to-log correlation.
+4. From the selected span, use **Logs for this span** to open Loki filtered to that trace and span ID. From the Loki record, use **Open trace** to return to the full Tempo trace, then select the same span ID again. Grafana's built-in Loki derived-field link opens a trace, not a span-specific selection; the span ID is logged and used to filter logs for the selected span, but Grafana does not preserve the span selection when navigating back from Loki.
 
 <img width="1858" height="957" alt="Screenshot from 2026-11-07 15-57-42" src="https://github.com/user-attachments/assets/af45e60f-7038-4df6-bd17-21078cc03631" />
 
-Grafana is provisioned with Tempo-to-Loki and Loki-to-Tempo links. The trace ID is a log field used for the link, not a Loki stream label.
+Grafana is provisioned with Tempo-to-Loki and Loki-to-Tempo links. The `trace_id` and `span_id` values are log fields, not Loki stream labels. The Loki-to-Tempo link opens the trace; match the span ID in Tempo to return to the exact span.
 
 ## 5. Test the local alert
 
@@ -110,7 +110,19 @@ There are two provisioned rules under **Alerting → Alert rules**:
 
 <img width="922" height="957" alt="Screenshot from 2026-11-07 16-14-17" src="https://github.com/user-attachments/assets/684aa2c6-0515-4214-b618-f458e132feb0" />
 
-To prove the alert path works, unpause **Local smoke test - duplicate registrations** in Grafana, then submit the same registration address enough times to produce at least three duplicate attempts within five minutes. Wait for the one-minute evaluation. The rule should enter **Firing**. Pause it again after verifying. This verifies rule evaluation in Grafana; no notification contact point is configured by default. To receive email or another notification, configure a contact point and notification policy in **Alerting**.
+To prove the alert path works, update the provisioned rule file rather than using Grafana's UI:
+
+1. In `observability/grafana/provisioning/alerting/alert-rules.yaml`, change `isPaused: true` to `isPaused: false` on **Local smoke test - duplicate registrations**.
+2. Restart Grafana so it reloads the provisioned rule. From the repository root, run:
+
+   ```sh
+   docker compose --project-name steadwork-observability --env-file observability/.env --file observability/compose.yaml restart grafana
+   ```
+
+3. Submit the same registration address enough times to produce at least three duplicate attempts within five minutes. Wait for the one-minute evaluation; the rule should enter **Firing**.
+4. To pause the rule again, change `isPaused: false` back to `isPaused: true` in the same file and repeat the Grafana restart command.
+
+This verifies rule evaluation; no notification contact point is configured by default. To receive email or another notification, configure a contact point and notification policy in **Alerting**. The provisioned alert rule is managed by this file, so UI edits are not the source of truth.
 
 The request success SLI is `1 - (5xx requests / eligible requests)` over a rolling 30-day window. The numerator counts Steadwork API requests whose `http_status_code` is 5xx; the denominator counts all Steadwork API HTTP requests from `http_server_duration_milliseconds_count`, selected with `service_name="steadwork-api"`. Health checks are excluded. A 4xx response, including expected validation, authorization, and duplicate-registration failures, counts as a successful response for this availability SLI. The **30-day request success SLI** stat displays the resulting proportion; the neighboring 5xx-ratio graph displays its inverse. If there have been no eligible requests, the SLI panel shows no data rather than reporting 100%. A provisional 99% monthly objective leaves a 1% error budget (about 7 hours 12 minutes in a 30-day month). Review the objective against real user needs before treating it as a commitment. Demo activity does not create HTTP requests and does not affect the SLI or operational alert rules.
 

@@ -19,7 +19,8 @@ datasources:
       derivedFields:
         - name: TraceID
           matcherRegex: "trace_id=([0-9a-f]{32})"
-          url: '${__value.raw}'
+          # Escape Grafana's macro in provisioning YAML so it is retained until the link is clicked.
+          url: '$${__value.raw}'
           urlDisplayLabel: Open trace
           datasourceUid: tempo
 
@@ -39,9 +40,10 @@ datasources:
           - key: service.version
             value: service_version
         filterByTraceID: true
-        filterBySpanID: false
+        filterBySpanID: true
         customQuery: true
-        query: '{service_name="steadwork-api"} |= "${__trace.traceId}"'
+        # Escape Grafana query macros so provisioning preserves them for runtime interpolation.
+        query: '{service_name="steadwork-api"} |= "$${__trace.traceId}" |= "span_id=$${__span.spanId}"'
       search:
         hide: false
       nodeGraph:

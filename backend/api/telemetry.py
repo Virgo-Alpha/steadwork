@@ -281,6 +281,11 @@ def _active_trace_id():
     return f"{context.trace_id:032x}" if context.is_valid else "0" * 32
 
 
+def _active_span_id():
+    context = trace.get_current_span().get_span_context()
+    return f"{context.span_id:016x}" if context.is_valid else "0" * 16
+
+
 def track_user_action(action, *, status_outcomes=None, when=None):
     """Record a bounded action span, counter and correlated summary log."""
 
@@ -304,8 +309,9 @@ def track_user_action(action, *, status_outcomes=None, when=None):
                     span.set_status(Status(StatusCode.ERROR, type(error).__name__))
                     user_action_counter.add(1, {"action": action, "outcome": outcome})
                     _logger.error(
-                        "user_action_failed trace_id=%s action=%s outcome=%s",
+                        "user_action_failed trace_id=%s span_id=%s action=%s outcome=%s",
                         _active_trace_id(),
+                        _active_span_id(),
                         action,
                         outcome,
                         extra={"steadwork_action": action, "steadwork_outcome": outcome},
@@ -321,8 +327,9 @@ def track_user_action(action, *, status_outcomes=None, when=None):
                     span.set_status(Status(StatusCode.ERROR))
                 user_action_counter.add(1, {"action": action, "outcome": outcome})
                 _logger.info(
-                    "user_action_completed trace_id=%s action=%s outcome=%s",
+                    "user_action_completed trace_id=%s span_id=%s action=%s outcome=%s",
                     _active_trace_id(),
+                    _active_span_id(),
                     action,
                     outcome,
                     extra={"steadwork_action": action, "steadwork_outcome": outcome},
