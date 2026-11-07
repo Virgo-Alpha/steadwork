@@ -86,6 +86,8 @@ In a third terminal, follow the audit trail:
 tail -F on-call-engineer/state/manual-test/audit.jsonl
 ```
 
+<img width="1856" height="629" alt="Screenshot from 2026-11-07 22-08-51" src="https://github.com/user-attachments/assets/be3b32ba-7272-4b5b-aef4-402ba397ef38" />
+
 The evidence that the agent woke and investigated is the sequence `alert_observed`, `context_collected`, `investigation_started`, and `investigation_completed`, including the alert fingerprint and cited telemetry. The run directory recorded in the audit contains `incident.json`, `agent.stdout`, `agent.stderr`, and `backend-tests.log`. The final test evidence is a `code_pushed` record containing the commit SHA and `test_result: passed`; the fix commit should appear on `oncall-agent-manual-test` in GitHub.
 
 **When `code_pushed` appears, press Ctrl+C in the poller terminal.** It will otherwise wait for a CI/development deployment that this branch does not trigger, then record an escalation. Do not interpret that expected wait-timeout escalation as a failed agent fix; the audit's `code_pushed` event and passing backend test log are the evidence for the agent response.
