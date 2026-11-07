@@ -97,7 +97,7 @@ Wait a few seconds for the metric export interval, then:
 
 4. From the selected span, use **Logs for this span** to open Loki filtered to that trace and span ID. To return to Tempo, expand the matching Loki log row (click the row or its expand caret) and look in the log details for the derived-field link labeled **Open trace**. Click that link to open the full Tempo trace, then select the same span ID again. The link appears in the expanded log details, not as a link on the collapsed row. If it is missing, confirm the log line contains `trace_id=<32 lowercase hex characters>`, that Loki's **TraceID** derived field is provisioned in the Loki data source, and restart Grafana after changing its provisioning file. Grafana's built-in Loki derived-field link opens a trace, not a span-specific selection; the span ID is logged and used to filter logs for the selected span, but Grafana does not preserve the span selection when navigating back from Loki.
 
-<img width="1858" height="957" alt="Screenshot from 2026-11-07 15-57-42" src="https://github.com/user-attachments/assets/af45e60f-7038-4df6-bd17-21078cc03631" />
+<img width="1856" height="957" alt="Screenshot from 2026-11-07 17-05-27" src="https://github.com/user-attachments/assets/b82071ff-26cb-4ab8-85db-91ed48bd2843" />
 
 Grafana is provisioned with Tempo-to-Loki and Loki-to-Tempo links. The `trace_id` and `span_id` values are log fields, not Loki stream labels. The Loki-to-Tempo link opens the trace; match the span ID in Tempo to return to the exact span.
 
@@ -119,8 +119,17 @@ To prove the alert path works, update the provisioned rule file rather than usin
    docker compose --project-name steadwork-observability --env-file observability/.env --file observability/compose.yaml restart grafana
    ```
 
-3. Submit the same registration address enough times to produce at least three duplicate attempts within five minutes. Wait for the one-minute evaluation; the rule should enter **Firing**.
-4. To pause the rule again, change `isPaused: false` back to `isPaused: true` in the same file and repeat the Grafana restart command.
+3. Submit the same registration address enough times to produce at least three duplicate attempts within five minutes.
+```sh
+curl -i http://127.0.0.1:8000/api/auth/register/ \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"otel-demo@example.test","password":"Local-test-password-42","name":"Demo","role":"candidate"}'
+```
+
+4. Wait for the one-minute evaluation; the rule should enter **Firing**:
+<img width="922" height="957" alt="Screenshot from 2026-11-07 16-48-11" src="https://github.com/user-attachments/assets/75199c6b-ad1c-4be5-ba3e-50ea9519adc2" />
+
+5. To pause the rule again, change `isPaused: false` back to `isPaused: true` in the same file and repeat the Grafana restart command.
 
 This verifies rule evaluation; no notification contact point is configured by default. To receive email or another notification, configure a contact point and notification policy in **Alerting**. The provisioned alert rule is managed by this file, so UI edits are not the source of truth.
 
