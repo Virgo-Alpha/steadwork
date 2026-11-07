@@ -2,6 +2,8 @@
 
 This guide shows how to start Steadwork with its local observability tools, inspect seeded and live activity graphs, create a visible application error, and follow that request from its metric to its trace and log. The app and observability services start together with the normal local commands.
 
+<img width="1288" height="907" alt="Screenshot from 2026-11-07 15-00-27" src="https://github.com/user-attachments/assets/23c5a2dc-3fd4-48c9-a071-ac2994a626cd" />
+
 ## 1. Start Steadwork
 
 Install Docker Compose, Node.js/npm, and [uv](https://docs.astral.sh/uv/). From the repository root, run:
@@ -52,6 +54,8 @@ To inspect each signal directly, choose **Explore** and select:
 - **Loki** for application logs. Search `{service_name="steadwork-api"}`. Action logs contain an `action`, an `outcome`, and `trace_id`; do not expect email addresses, resumes, or other user data in telemetry.
 - **Tempo** for traces and spans. Search by service name `steadwork-api`, or paste a trace ID found in a Loki log. A trace is the end-to-end request; spans show its individual operations.
 
+<img width="826" height="551" alt="Screenshot from 2026-11-07 15-03-49" src="https://github.com/user-attachments/assets/880e7183-0c87-49d6-87d2-134bef4867f1" />
+
 The custom counter `steadwork_user_action_total` has bounded `action` and `outcome` labels and counts real requests only. Instrumented actions include registration, login, application submission, withdrawal, job creation/status changes, and application review. Outcomes include success, expected user-visible failures such as `duplicate_email`, and `server_error`.
 
 Live business events increment `steadwork_business_event_total`, with bounded `event`, `role`, `application_method`, and `origin` labels. Real requests use `origin=live`. Events include `user_registered`, `login_succeeded`, `job_published`, `application_submitted`, `application_withdrawn`, `application_rejected`, `external_apply_clicked`, `job_saved`, and `job_unsaved`. Publication counts happen when a job is actually published, not when a draft is created. Rejections count on a transition into Rejected, not when the same status is saved again. `steadwork_business_events_rolling` is a database-backed gauge grouped by event, origin, and rolling window (`24h` or `7d`); it includes historical demo rows as well as live rows. `steadwork_user_actions_rolling` maps persisted successful business events to the matching tracked action name and reports rolling counts by action, outcome, and origin. It only represents successes; actual request failures and expected error outcomes remain in `steadwork_user_action_total` and are never seeded. Explore daily totals with `sum by (event, origin) (steadwork_business_events_rolling{window="24h"})`, or weekly totals with `sum by (event, origin) (steadwork_business_events_rolling{window="7d"})`.
@@ -69,17 +73,31 @@ With the local API running, submit a unique test address twice. This example use
 ```sh
 curl -i http://127.0.0.1:8000/api/auth/register/ \
   -H 'Content-Type: application/json' \
-  -d '{"email":"otel-demo@example.test","password":"Local-test-password-42","first_name":"OTel","last_name":"Demo","role":"candidate"}'
+  -d '{"email":"otel-demo@example.test","password":"Local-test-password-42","name":"Demo","role":"candidate"}'
 ```
 
 The first response should be `201`. Repeat the same command; the response should be `409`. If the API expects a different registration body in a future version, use the registration form in the app twice with the same address; the expected result is the same. The test `backend/api/tests/test_telemetry.py` verifies both the successful and duplicate outcomes.
 
+<img width="1857" height="706" alt="Screenshot from 2026-11-07 15-37-59" src="https://github.com/user-attachments/assets/536d23aa-b3b9-4549-af52-8e9ea2ed782b" />
+
+
 Wait a few seconds for the metric export interval, then:
 
 1. In Grafana **Explore → Prometheus**, query `steadwork_user_action_total{action="register",outcome="duplicate_email"}`. Its value should increase after each duplicate submission.
+
+<img width="933" height="911" alt="Screenshot from 2026-11-07 15-40-33" src="https://github.com/user-attachments/assets/5d7cf326-4c6d-4955-b3a5-1de86dcff74d" />
+
 2. In **Explore → Loki**, search `{service_name="steadwork-api"} |= "duplicate_email"`. Open a matching log line and copy its 32-character `trace_id`.
+
+<img width="933" height="928" alt="Screenshot from 2026-11-07 15-42-35" src="https://github.com/user-attachments/assets/0d679a02-24ac-4bcd-853e-e27cf92cc666" />
+
 3. In **Explore → Tempo**, search for service `steadwork-api` or paste that trace ID. Open the trace and inspect its request spans.
+
+<img width="933" height="957" alt="Screenshot from 2026-11-07 15-44-38" src="https://github.com/user-attachments/assets/ee1b5a74-b0c0-462e-8612-52b4fc131bbe" />
+
 4. From the trace details, use **Logs for this span** to open the Loki records carrying the same trace ID. From the Loki record, use its trace link to return to the Tempo trace. This checks both directions of trace-to-log correlation.
+
+<img width="1858" height="957" alt="Screenshot from 2026-11-07 15-57-42" src="https://github.com/user-attachments/assets/af45e60f-7038-4df6-bd17-21078cc03631" />
 
 Grafana is provisioned with Tempo-to-Loki and Loki-to-Tempo links. The trace ID is a log field used for the link, not a Loki stream label.
 
@@ -89,6 +107,8 @@ There are two provisioned rules under **Alerting → Alert rules**:
 
 - **Repeated application submission failures** is the operational rule. It fires when at least three server-side submission failures occur in ten minutes and remain present for five minutes.
 - **Local smoke test - duplicate registrations** is a test-only rule. It is paused initially so expected duplicate-email behavior does not create a permanent alert.
+
+<img width="922" height="957" alt="Screenshot from 2026-11-07 16-14-17" src="https://github.com/user-attachments/assets/684aa2c6-0515-4214-b618-f458e132feb0" />
 
 To prove the alert path works, unpause **Local smoke test - duplicate registrations** in Grafana, then submit the same registration address enough times to produce at least three duplicate attempts within five minutes. Wait for the one-minute evaluation. The rule should enter **Firing**. Pause it again after verifying. This verifies rule evaluation in Grafana; no notification contact point is configured by default. To receive email or another notification, configure a contact point and notification policy in **Alerting**.
 
