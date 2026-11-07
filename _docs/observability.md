@@ -97,7 +97,7 @@ Wait a few seconds for the metric export interval, then:
 
 4. From the selected span, use **Logs for this span** to open Loki filtered to that trace and span ID. From the Loki record, use **Open trace** to return to the full Tempo trace, then select the same span ID again. Grafana's built-in Loki derived-field link opens a trace, not a span-specific selection; the span ID is logged and used to filter logs for the selected span, but Grafana does not preserve the span selection when navigating back from Loki.
 
-<img width="1858" height="957" alt="Screenshot from 2026-11-07 15-57-42" src="https://github.com/user-attachments/assets/af45e60f-7038-4df6-bd17-21078cc03631" />
+<img width="1856" height="957" alt="Screenshot from 2026-11-07 17-05-27" src="https://github.com/user-attachments/assets/b82071ff-26cb-4ab8-85db-91ed48bd2843" />
 
 Grafana is provisioned with Tempo-to-Loki and Loki-to-Tempo links. The `trace_id` and `span_id` values are log fields, not Loki stream labels. The Loki-to-Tempo link opens the trace; match the span ID in Tempo to return to the exact span.
 
