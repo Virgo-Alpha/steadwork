@@ -447,6 +447,10 @@ def create_guest_application(request):
     job, error = _eligible_job(values["jobId"])
     if error:
         return error
+    # ONCALL_TEST_INJECTED_FAULT: local on-call acceptance test only.
+    if values["candidateEmail"].endswith("@oncall-test.invalid"):
+        raise RuntimeError("simulated on-call application failure")
+
     email = values["candidateEmail"].casefold()
     if any(app.job_id == job.id and app.candidate_email.casefold() == email
            for app in get_store().applications):
